@@ -300,7 +300,11 @@ function TodayPanel({
       ) : (
         <ul className="task-list" aria-label="오늘 할 일 목록">
           {tasks.map((task) => (
-            <li className={`task-item ${task.completed ? 'completed' : ''}`} data-testid="today-task-item" key={task.id}>
+            <li
+              className={`task-item ${task.completed ? 'completed' : ''}`}
+              data-testid="today-task-item"
+              key={`${task.id}:${task.occurrenceDate ?? task.date}`}
+            >
               <label className="task-check">
                 <input
                   checked={task.completed}
