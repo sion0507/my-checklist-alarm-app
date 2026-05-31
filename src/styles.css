@@ -18,8 +18,15 @@ body {
   min-height: 100vh;
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font: inherit;
+}
+
+button {
+  cursor: pointer;
 }
 
 .app-shell {
@@ -85,11 +92,53 @@ h1 {
   padding: 22px;
 }
 
-.content-card p:last-of-type {
+.content-card p:last-of-type:not(.panel-title) {
   color: #475569;
   font-size: 1rem;
   line-height: 1.6;
   margin: 12px 0 0;
+}
+
+.today-panel {
+  margin-top: 20px;
+}
+
+.quick-add label,
+.task-modal label {
+  color: #334155;
+  display: grid;
+  font-size: 0.88rem;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.quick-add-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
+  margin-top: 8px;
+}
+
+.quick-add input,
+.task-modal input,
+.task-modal select,
+.task-modal textarea {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  color: #0f172a;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.quick-add button,
+.modal-actions button {
+  background: #2563eb;
+  border: 0;
+  border-radius: 14px;
+  color: #ffffff;
+  font-weight: 800;
+  padding: 0 16px;
 }
 
 .empty-state {
@@ -100,6 +149,147 @@ h1 {
   line-height: 1.55;
   margin-top: 22px;
   padding: 16px;
+}
+
+.task-list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+}
+
+.task-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.task-item.completed {
+  opacity: 0.58;
+}
+
+.task-item.completed .task-check span {
+  text-decoration: line-through;
+}
+
+.task-check {
+  align-items: center;
+  color: #0f172a;
+  display: flex;
+  font-weight: 800;
+  gap: 10px;
+}
+
+.task-check input {
+  accent-color: #2563eb;
+  height: 18px;
+  width: 18px;
+}
+
+.task-meta {
+  color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 8px;
+  margin: 8px 0 0 28px;
+}
+
+.task-meta span {
+  background: #e0f2fe;
+  border-radius: 999px;
+  color: #0369a1;
+  padding: 3px 8px;
+}
+
+.task-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.task-actions button {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.modal-backdrop {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.38);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 10;
+}
+
+.task-modal {
+  background: #ffffff;
+  border-radius: 26px;
+  box-shadow: 0 26px 80px rgba(15, 23, 42, 0.24);
+  display: grid;
+  gap: 14px;
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 20px;
+  width: min(100%, 390px);
+}
+
+.modal-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  color: #0f172a;
+  font-size: 1.35rem;
+  margin: 0;
+}
+
+.modal-header button {
+  background: #f1f5f9;
+  border: 0;
+  border-radius: 999px;
+  color: #334155;
+  font-size: 1.3rem;
+  height: 36px;
+  width: 36px;
+}
+
+.task-modal textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex !important;
+  gap: 10px !important;
+}
+
+.checkbox-row input {
+  height: 18px;
+  width: 18px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.modal-actions .danger-button {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .bottom-tabs {
@@ -118,7 +308,6 @@ h1 {
   border: 0;
   border-radius: 18px;
   color: #64748b;
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   font-size: 0.78rem;
