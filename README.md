@@ -2,7 +2,9 @@
 
 Personal iPhone-first checklist alarm PWA.
 
-## Current slice
+## Implemented slices
+
+### Issue #2: PWA app shell
 
 Issue #2 implements the initial PWA app shell:
 
@@ -14,6 +16,18 @@ Issue #2 implements the initial PWA app shell:
 - Unit and smoke test harness
 
 Push notification support is not claimed yet; that is planned for later issues after the iPhone PWA feasibility spike.
+
+### Issue #3: Local task source of truth and Today CRUD
+
+Issue #3 implements the local Today task workflow:
+
+- IndexedDB-backed structured task storage
+- Today quick-add using a title only
+- Task detail modal fields: title, date, optional time, recurrence, memo, notification on/off
+- Today flow edit, delete, and complete actions
+- Incomplete tasks shown above completed tasks
+- Completed tasks stay visible with checked/de-emphasized styling
+- Unit tests for persistence/store behavior and Today workflow coverage
 
 ## Requirements
 
