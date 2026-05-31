@@ -1,11 +1,15 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
+  completeTaskOccurrence,
   createTask,
   deleteTask,
+  deleteTaskOccurrence,
   getTodayDateString,
-  listTasks,
+  listTaskOccurrencesForDate,
+  moveTaskOccurrence,
   Recurrence,
   Task,
+  TaskOccurrence,
   updateTask,
 } from './taskStore';
 
@@ -56,7 +60,7 @@ const recurrenceLabels: Record<Recurrence, string> = {
   monthly: '매월',
 };
 
-function sortIncompleteFirst(tasks: Task[]) {
+function sortIncompleteFirst<T extends Task>(tasks: T[]) {
   return [...tasks].sort((a, b) => {
     if (a.completed !== b.completed) {
       return a.completed ? 1 : -1;
@@ -88,24 +92,21 @@ type TaskFormState = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('today');
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<TaskOccurrence[]>([]);
   const [quickTitle, setQuickTitle] = useState('');
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskOccurrence | null>(null);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
 
   async function refreshTasks() {
-    setTasks(await listTasks());
+    setTasks(await listTaskOccurrencesForDate(getTodayDateString()));
   }
 
   useEffect(() => {
     void refreshTasks();
   }, []);
 
-  const todayTasks = useMemo(
-    () => sortIncompleteFirst(tasks.filter((task) => task.date === getTodayDateString())),
-    [tasks],
-  );
+  const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
 
   async function handleQuickAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -126,7 +127,7 @@ export default function App() {
     await refreshTasks();
   }
 
-  function openEditModal(task: Task) {
+  function openEditModal(task: TaskOccurrence) {
     setEditingTask(task);
     setForm({
       title: task.title,
@@ -144,17 +145,49 @@ export default function App() {
       return;
     }
 
+    if (editingTask.isRecurringOccurrence) {
+      if (form.date !== editingTask.date) {
+        await moveTaskOccurrence(editingTask.id, editingTask.occurrenceDate, form.date);
+      }
+    } else {
+      await updateTask(editingTask.id, form);
+    }
+    setEditingTask(null);
+    await refreshTasks();
+  }
+
+  async function handleSaveRecurringRule() {
+    if (!editingTask || !form.title.trim() || !form.date) {
+      return;
+    }
+
     await updateTask(editingTask.id, form);
     setEditingTask(null);
     await refreshTasks();
   }
 
-  async function handleToggleComplete(task: Task) {
-    await updateTask(task.id, { completed: !task.completed });
+  async function handleToggleComplete(task: TaskOccurrence) {
+    if (task.isRecurringOccurrence) {
+      await completeTaskOccurrence(task.id, task.occurrenceDate, !task.completed);
+    } else {
+      await updateTask(task.id, { completed: !task.completed });
+    }
     await refreshTasks();
   }
 
-  async function handleDeleteTask(task: Task) {
+  async function handleDeleteTask(task: TaskOccurrence) {
+    if (task.isRecurringOccurrence) {
+      await deleteTaskOccurrence(task.id, task.occurrenceDate);
+    } else {
+      await deleteTask(task.id);
+    }
+    if (editingTask?.id === task.id) {
+      setEditingTask(null);
+    }
+    await refreshTasks();
+  }
+
+  async function handleDeleteRecurringRule(task: TaskOccurrence) {
     await deleteTask(task.id);
     if (editingTask?.id === task.id) {
       setEditingTask(null);
@@ -214,8 +247,10 @@ export default function App() {
           form={form}
           onClose={() => setEditingTask(null)}
           onDelete={() => void handleDeleteTask(editingTask)}
+          onDeleteRecurringRule={() => void handleDeleteRecurringRule(editingTask)}
           onFormChange={setForm}
           onSave={handleSaveTask}
+          onSaveRecurringRule={() => void handleSaveRecurringRule()}
           task={editingTask}
         />
       ) : null}
@@ -224,13 +259,13 @@ export default function App() {
 }
 
 type TodayPanelProps = {
-  tasks: Task[];
+  tasks: TaskOccurrence[];
   quickTitle: string;
   onQuickTitleChange: (value: string) => void;
   onQuickAdd: (event: FormEvent<HTMLFormElement>) => void;
-  onToggleComplete: (task: Task) => void;
-  onEditTask: (task: Task) => void;
-  onDeleteTask: (task: Task) => void;
+  onToggleComplete: (task: TaskOccurrence) => void;
+  onEditTask: (task: TaskOccurrence) => void;
+  onDeleteTask: (task: TaskOccurrence) => void;
 };
 
 function TodayPanel({
@@ -297,15 +332,26 @@ function TodayPanel({
 }
 
 type TaskDetailModalProps = {
-  task: Task;
+  task: TaskOccurrence;
   form: TaskFormState;
   onFormChange: (form: TaskFormState) => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
+  onSaveRecurringRule: () => void;
   onDelete: () => void;
+  onDeleteRecurringRule: () => void;
   onClose: () => void;
 };
 
-function TaskDetailModal({ task, form, onFormChange, onSave, onDelete, onClose }: TaskDetailModalProps) {
+function TaskDetailModal({
+  task,
+  form,
+  onFormChange,
+  onSave,
+  onSaveRecurringRule,
+  onDelete,
+  onDeleteRecurringRule,
+  onClose,
+}: TaskDetailModalProps) {
   return (
     <div aria-modal="true" className="modal-backdrop" role="dialog" aria-label={`${task.title} 상세`}>
       <form className="task-modal" onSubmit={onSave}>
@@ -366,11 +412,22 @@ function TaskDetailModal({ task, form, onFormChange, onSave, onDelete, onClose }
           />
           알림 켜기
         </label>
+        {task.isRecurringOccurrence ? (
+          <div className="recurrence-actions" aria-label="반복 규칙 작업">
+            <p>이 반복 할 일의 기본 저장/삭제는 선택한 날짜({task.occurrenceDate})에만 적용됩니다.</p>
+            <button onClick={onSaveRecurringRule} type="button">
+              반복 규칙 전체 저장
+            </button>
+            <button className="danger-button" onClick={onDeleteRecurringRule} type="button">
+              반복 규칙 전체 삭제
+            </button>
+          </div>
+        ) : null}
         <div className="modal-actions">
           <button className="danger-button" onClick={onDelete} type="button">
-            삭제
+            {task.isRecurringOccurrence ? '이 날짜만 삭제' : '삭제'}
           </button>
-          <button type="submit">저장</button>
+          <button type="submit">{task.isRecurringOccurrence ? '이 날짜만 저장' : '저장'}</button>
         </div>
       </form>
     </div>
