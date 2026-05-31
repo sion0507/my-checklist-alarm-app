@@ -1,0 +1,19 @@
+{
+  "name": "Checklist Alarm",
+  "short_name": "Checklist",
+  "description": "iPhone-first personal checklist alarm PWA shell.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#f8fafc",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/maskable-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

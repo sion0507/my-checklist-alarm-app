@@ -1,25 +1,69 @@
-# my-checklist-alarm-app
+# My Checklist Alarm App
 
-개인용 체크리스트 알림 PWA. 사용자가 미리 할 일을 기록해두면 당일 아침에 오늘 할 일을 정리해 알려주고, 추가 할 일 입력을 유도하며, 시간이 지정된 할 일은 해당 시간에 확인 알림을 보내고, 저녁에는 미완료 할 일을 정리하도록 돕는다.
+Personal iPhone-first checklist alarm PWA.
 
-## 핵심 목표
+## Current slice
 
-가장 중요한 목표는 **iPhone 잠금화면에도 도착하는 실제 푸시 알림**이다. 앱 내 알림만으로 끝내지 않는다. 다만 iOS PWA/Web Push 제약이 있으므로 planner는 푸시 알림 구현 가능성과 대안을 별도 리스크로 다뤄야 한다.
+Issue #2 implements the initial PWA app shell:
 
-## 확정 방향
+- Vite + React + TypeScript app skeleton
+- iPhone-first responsive shell
+- Bottom tabs: `오늘`, `캘린더`, `설정`
+- Today as the default entry view
+- PWA manifest and local service worker foundation
+- Unit and smoke test harness
 
-- 저장 방식: MVP는 브라우저 로컬 저장 사용
-- 앱 형태: iPhone 홈 화면 설치형 PWA
-- 사용 대상: 본인 1인 사용
-- 알림 목표: 실제 푸시 알림 우선
-- 아침 알림: 시간 설정 가능, 가능하면 알림음/노래 설정도 지원
-- 저녁 리마인드: 기본 23:00, 설정 가능
-- 반복 할 일: 매일/매주/매월 포함
-- 미완료 처리: 저녁 23시에 미완료 목록을 보여주고 `삭제` 또는 `다른 날짜로 넘기기`를 묻는 흐름
+Push notification support is not claimed yet; that is planned for later issues after the iPhone PWA feasibility spike.
 
-## 주요 문서
+## Requirements
 
-- `PROJECT_BRIEF.md`: 제품 방향과 요구사항
-- `PLANS.md`: planner가 사용할 구현 계획 초안
-- `AGENTS.md`: 구현 에이전트 작업 지침
-- `/tmp/my-checklist-alarm-app-handoff.md`: 다음 에이전트용 요약 인수인계
+- Node.js 20+
+- npm 10+
+
+## Commands
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the app locally:
+
+```bash
+npm run dev
+```
+
+Run unit tests:
+
+```bash
+npm run test
+```
+
+Run the app-shell smoke test:
+
+```bash
+npm run test:e2e
+```
+
+Run all automated tests:
+
+```bash
+npm run test:all
+```
+
+Create a production build:
+
+```bash
+npm run build
+```
+
+Preview the production build:
+
+```bash
+npm run preview
+```
+
+## PWA foundation
+
+The app publishes `/manifest.webmanifest` and registers `/service-worker.js` for a minimal cache-first shell foundation. The service worker intentionally does not include Web Push handlers yet.
