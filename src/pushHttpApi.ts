@@ -52,6 +52,15 @@ export function createPushHttpApi(options: PushHttpApiOptions) {
           return json(200, result);
         }
 
+        if (request.method === 'POST' && action === 'schedule') {
+          const body = await readJson(request);
+          if (typeof body.endpoint !== 'string' || !Array.isArray(body.jobs)) {
+            return json(400, { error: 'Push subscription endpoint and jobs are required' });
+          }
+          const result = await backend.replaceScheduledJobs(body as Parameters<typeof backend.replaceScheduledJobs>[0]);
+          return json(200, result);
+        }
+
         return json(404, { error: 'Push API route not found' });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Push API request failed';
