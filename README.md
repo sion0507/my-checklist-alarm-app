@@ -29,6 +29,15 @@ Issue #3 implements the local Today task workflow:
 - Completed tasks stay visible with checked/de-emphasized styling
 - Unit tests for persistence/store behavior and Today workflow coverage
 
+### Issue #10: Morning check-in workflow
+
+Issue #10 adds a daily morning check-in card on the Today screen:
+
+- The card appears every day until that date is marked done/collapsed and persists dismissal by date in local storage
+- It summarizes today's task count and a short task list without depending on push delivery
+- It asks whether there is anything else to add and provides a morning-card quick-add that creates a task for today
+- Morning schedule jobs continue to use the configurable reminder setting, defaulting to `08:00`, and remain part of the seven-day schedule sync
+
 ### Issue #9: Seven-day notification schedule planner and sync
 
 Issue #9 derives backend notification jobs from local checklist data while keeping the local task store as source of truth:

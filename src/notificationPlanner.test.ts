@@ -47,6 +47,18 @@ describe('seven-day notification schedule planner', () => {
     expect(JSON.stringify(jobs)).not.toContain('local-only memo');
   });
 
+  it('uses configurable morning reminder time with 08:00 as the documented default setting', () => {
+    const defaultJobs = buildSevenDayNotificationSchedule({ tasks: [], settings, startDate: '2026-06-01' });
+    const customJobs = buildSevenDayNotificationSchedule({
+      tasks: [],
+      settings: { ...settings, morningTime: '07:15' },
+      startDate: '2026-06-01',
+    });
+
+    expect(defaultJobs.find((job) => job.jobId === 'morning:2026-06-01')).toMatchObject({ scheduledFor: '2026-06-01T08:00:00' });
+    expect(customJobs.find((job) => job.jobId === 'morning:2026-06-01')).toMatchObject({ scheduledFor: '2026-06-01T07:15:00' });
+  });
+
   it('derives recurrence occurrences and respects completed, deleted, moved, and notify-off state', () => {
     const jobs = buildSevenDayNotificationSchedule({
       tasks: [
