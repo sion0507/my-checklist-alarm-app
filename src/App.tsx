@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { addMonths, formatDateKey, getCalendarMonthDays, getVisibleTaskPills, weekdayHeaders, type CalendarMonth } from './calendarUtils';
 import {
   completeTaskOccurrence,
   createTask,
@@ -6,6 +7,7 @@ import {
   deleteTaskOccurrence,
   getTodayDateString,
   listTaskOccurrencesForDate,
+  listTasks,
   moveTaskOccurrence,
   Recurrence,
   Task,
@@ -90,16 +92,28 @@ type TaskFormState = {
   notify: boolean;
 };
 
-export default function App() {
+type AppProps = {
+  initialCalendarDate?: Date;
+};
+
+export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [activeTab, setActiveTab] = useState<TabId>('today');
   const [tasks, setTasks] = useState<TaskOccurrence[]>([]);
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [quickTitle, setQuickTitle] = useState('');
+  const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
+  const [calendarDate, setCalendarDate] = useState(() => new Date(initialCalendarDate.getFullYear(), initialCalendarDate.getMonth(), 1));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => formatDateKey(initialCalendarDate));
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<TaskOccurrence | null>(null);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
 
   async function refreshTasks() {
-    setTasks(await listTaskOccurrencesForDate(getTodayDateString()));
+    const today = getTodayDateString();
+    const [todayOccurrences, storedTasks] = await Promise.all([listTaskOccurrencesForDate(today), listTasks()]);
+    setTasks(todayOccurrences);
+    setAllTasks(storedTasks);
   }
 
   useEffect(() => {
@@ -107,6 +121,58 @@ export default function App() {
   }, []);
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
+  const calendarMonth = useMemo(
+    () => getCalendarMonthDays(calendarDate.getFullYear(), calendarDate.getMonth(), allTasks, getTodayDateString()),
+    [allTasks, calendarDate],
+  );
+  const selectedDay = calendarMonth.days.find((day) => day.date === selectedCalendarDate);
+  const selectedTasks = selectedDay?.tasks ?? [];
+
+  function changeCalendarMonth(delta: number) {
+    setCalendarDate((current) => addMonths(current, delta));
+  }
+
+  function jumpCalendarMonth(year: number, monthIndex: number) {
+    setCalendarDate(new Date(year, monthIndex, 1));
+  }
+
+  function handleCalendarTouchEnd(x: number) {
+    if (touchStartX === null) {
+      return;
+    }
+    const delta = x - touchStartX;
+    if (Math.abs(delta) > 48) {
+      changeCalendarMonth(delta > 0 ? -1 : 1);
+    }
+    setTouchStartX(null);
+  }
+
+  async function handleCalendarQuickAdd(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = calendarQuickTitle.trim();
+    if (!title) {
+      return;
+    }
+
+    await createTask({
+      title,
+      date: selectedCalendarDate,
+      time: '',
+      recurrence: 'none',
+      memo: '',
+      notify: false,
+    });
+    setCalendarQuickTitle('');
+    await refreshTasks();
+  }
+
+  async function handleSelectCalendarDate(date: string) {
+    setSelectedCalendarDate(date);
+  }
+
+  async function handleAddSelectedTask(task: TaskOccurrence) {
+    openEditModal(task);
+  }
 
   async function handleQuickAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -167,6 +233,11 @@ export default function App() {
   }
 
   async function handleToggleComplete(task: TaskOccurrence) {
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id && item.occurrenceDate === task.occurrenceDate ? { ...item, completed: !task.completed } : item,
+      ),
+    );
     if (task.isRecurringOccurrence) {
       await completeTaskOccurrence(task.id, task.occurrenceDate, !task.completed);
     } else {
@@ -218,6 +289,22 @@ export default function App() {
               onToggleComplete={handleToggleComplete}
               quickTitle={quickTitle}
               tasks={todayTasks}
+            />
+          ) : null}
+          {active.id === 'calendar' ? (
+            <CalendarPanel
+              calendarQuickTitle={calendarQuickTitle}
+              month={calendarMonth}
+              onAddTask={handleCalendarQuickAdd}
+              onJumpMonth={jumpCalendarMonth}
+              onMonthChange={changeCalendarMonth}
+              onOpenTask={handleAddSelectedTask}
+              onQuickTitleChange={setCalendarQuickTitle}
+              onSelectDate={handleSelectCalendarDate}
+              onTouchEnd={handleCalendarTouchEnd}
+              onTouchStart={setTouchStartX}
+              selectedDate={selectedCalendarDate}
+              selectedTasks={selectedTasks}
             />
           ) : null}
         </section>
@@ -331,6 +418,180 @@ function TodayPanel({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+type CalendarPanelProps = {
+  month: CalendarMonth;
+  selectedDate: string;
+  selectedTasks: TaskOccurrence[];
+  calendarQuickTitle: string;
+  onMonthChange: (delta: number) => void;
+  onJumpMonth: (year: number, monthIndex: number) => void;
+  onSelectDate: (date: string) => void;
+  onOpenTask: (task: TaskOccurrence) => void;
+  onQuickTitleChange: (value: string) => void;
+  onAddTask: (event: FormEvent<HTMLFormElement>) => void;
+  onTouchStart: (x: number) => void;
+  onTouchEnd: (x: number) => void;
+};
+
+function CalendarPanel({
+  month,
+  selectedDate,
+  selectedTasks,
+  calendarQuickTitle,
+  onMonthChange,
+  onJumpMonth,
+  onSelectDate,
+  onOpenTask,
+  onQuickTitleChange,
+  onAddTask,
+  onTouchStart,
+  onTouchEnd,
+}: CalendarPanelProps) {
+  const years = Array.from({ length: 7 }, (_, index) => month.year - 3 + index);
+  const selectedDateLabel = `${selectedDate} 일정`;
+
+  return (
+    <div className="calendar-panel">
+      <div className="calendar-hero">
+        <div>
+          <p className="calendar-caption">Month view</p>
+          <h2>{month.title}</h2>
+        </div>
+        <div className="calendar-nav" aria-label="월 이동">
+          <button aria-label="이전 달" onClick={() => onMonthChange(-1)} type="button">
+            ‹
+          </button>
+          <button aria-label="다음 달" onClick={() => onMonthChange(1)} type="button">
+            ›
+          </button>
+        </div>
+      </div>
+
+      <div className="calendar-jump" aria-label="연월 바로 이동">
+        <label>
+          연도 선택
+          <select value={month.year} onChange={(event) => onJumpMonth(Number(event.target.value), month.monthIndex)}>
+            {years.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          월 선택
+          <select value={month.monthIndex} onChange={(event) => onJumpMonth(month.year, Number(event.target.value))}>
+            {Array.from({ length: 12 }, (_, monthIndex) => (
+              <option key={monthIndex} value={monthIndex}>
+                {monthIndex + 1}월
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div
+        className="calendar-grid-wrap"
+        onTouchStart={(event) => onTouchStart(event.changedTouches[0].clientX)}
+        onTouchEnd={(event) => onTouchEnd(event.changedTouches[0].clientX)}
+      >
+        <div className="calendar-weekdays" role="row">
+          {weekdayHeaders.map((weekday) => (
+            <span className="weekday" key={weekday} role="columnheader">
+              {weekday}
+            </span>
+          ))}
+        </div>
+        <div className="calendar-grid" role="grid" aria-label={`${month.title} calendar grid`}>
+          {month.days.map((day) => {
+            const { visible, overflowCount } = getVisibleTaskPills(day.tasks, 2);
+            const dayClasses = [
+              'calendar-day',
+              day.isCurrentMonth ? '' : 'adjacent-month',
+              day.isToday ? 'today' : '',
+              day.isWeekend ? 'weekend' : '',
+              day.date === selectedDate ? 'selected' : '',
+              day.marker ? `marker-${day.marker}` : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
+
+            return (
+              <div
+                aria-label={`${day.date}${day.markerLabel ? ` ${day.markerLabel}` : ''}`}
+                className={dayClasses}
+                data-testid="calendar-day-cell"
+                key={day.date}
+                onClick={() => onSelectDate(day.date)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelectDate(day.date);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <span className="day-number">{day.dayNumber}</span>
+                {day.markerLabel ? <span className="date-marker">{day.markerLabel}</span> : null}
+                <div className="task-pill-stack">
+                  {visible.map((task) => (
+                    <button
+                      aria-label={`${task.title} 상세 열기`}
+                      className="task-pill"
+                      key={`${task.id}:${task.occurrenceDate}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenTask(task);
+                      }}
+                      type="button"
+                    >
+                      {task.time ? `${task.time} ` : ''}
+                      {task.title}
+                    </button>
+                  ))}
+                  {overflowCount > 0 ? <span className="more-pill">+{overflowCount} more</span> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <section className="selected-date-panel" aria-label="선택 날짜 일정">
+        <h2>{selectedDateLabel}</h2>
+        <form className="quick-add" onSubmit={onAddTask}>
+          <label htmlFor="calendar-add-title">선택한 날짜에 할 일 추가</label>
+          <div className="quick-add-row">
+            <input
+              id="calendar-add-title"
+              onChange={(event) => onQuickTitleChange(event.target.value)}
+              placeholder="예: 약속 준비"
+              type="text"
+              value={calendarQuickTitle}
+            />
+            <button type="submit">날짜에 추가</button>
+          </div>
+        </form>
+        {selectedTasks.length === 0 ? (
+          <p className="calendar-empty">선택한 날짜에 등록된 할 일이 없습니다.</p>
+        ) : (
+          <ul className="selected-task-list">
+            {selectedTasks.map((task) => (
+              <li key={`${task.id}:${task.occurrenceDate}`}>
+                <button onClick={() => onOpenTask(task)} type="button">
+                  {task.time ? `${task.time} ` : ''}
+                  {task.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
