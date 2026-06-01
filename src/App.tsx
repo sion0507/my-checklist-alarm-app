@@ -62,6 +62,55 @@ const recurrenceLabels: Record<Recurrence, string> = {
   monthly: '매월',
 };
 
+const reminderSettingsKey = 'checklist-alarm:reminder-settings';
+
+const defaultReminderSettings: ReminderSettings = {
+  morningTime: '08:00',
+  eveningTime: '23:00',
+};
+
+type ReminderSettings = {
+  morningTime: string;
+  eveningTime: string;
+};
+
+type NotificationPermissionView = NotificationPermission | 'unsupported';
+
+const notificationPermissionLabels: Record<NotificationPermissionView, string> = {
+  default: '권한 요청 필요',
+  denied: '차단됨',
+  granted: '허용됨',
+  unsupported: '지원되지 않음',
+};
+
+function isTimeValue(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{2}:\d{2}$/.test(value);
+}
+
+function loadReminderSettings(): ReminderSettings {
+  try {
+    const stored = localStorage.getItem(reminderSettingsKey);
+    if (!stored) {
+      return defaultReminderSettings;
+    }
+    const parsed = JSON.parse(stored) as Partial<ReminderSettings>;
+    return {
+      morningTime: isTimeValue(parsed.morningTime) ? parsed.morningTime : defaultReminderSettings.morningTime,
+      eveningTime: isTimeValue(parsed.eveningTime) ? parsed.eveningTime : defaultReminderSettings.eveningTime,
+    };
+  } catch {
+    return defaultReminderSettings;
+  }
+}
+
+function saveReminderSettings(settings: ReminderSettings) {
+  localStorage.setItem(reminderSettingsKey, JSON.stringify(settings));
+}
+
+function getNotificationPermission(): NotificationPermissionView {
+  return 'Notification' in window ? Notification.permission : 'unsupported';
+}
+
 function sortIncompleteFirst<T extends Task>(tasks: T[]) {
   return [...tasks].sort((a, b) => {
     if (a.completed !== b.completed) {
@@ -104,6 +153,9 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
   const [calendarDate, setCalendarDate] = useState(() => new Date(initialCalendarDate.getFullYear(), initialCalendarDate.getMonth(), 1));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => formatDateKey(initialCalendarDate));
+  const [reminderSettings, setReminderSettings] = useState(loadReminderSettings);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionView>(getNotificationPermission);
+  const [testNotificationMessage, setTestNotificationMessage] = useState('');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<TaskOccurrence | null>(null);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
@@ -119,6 +171,10 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   useEffect(() => {
     void refreshTasks();
   }, []);
+
+  useEffect(() => {
+    saveReminderSettings(reminderSettings);
+  }, [reminderSettings]);
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
   const calendarMonth = useMemo(
@@ -276,6 +332,33 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     await refreshTasks();
   }
 
+  async function handleTestNotification() {
+    setTestNotificationMessage('');
+    if (!('Notification' in window)) {
+      setNotificationPermission('unsupported');
+      setTestNotificationMessage('이 브라우저에서는 알림을 지원하지 않습니다.');
+      return;
+    }
+
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    setNotificationPermission(permission);
+
+    if (permission === 'granted') {
+      try {
+        new Notification('Checklist Alarm 테스트', { body: '알림 설정이 동작합니다.' });
+        setTestNotificationMessage('테스트 알림을 보냈습니다.');
+      } catch {
+        setTestNotificationMessage('테스트 알림을 표시하지 못했습니다.');
+      }
+      return;
+    }
+
+    setTestNotificationMessage('알림 권한이 허용되지 않아 테스트 알림을 보낼 수 없습니다.');
+  }
+
   return (
     <main className="app-shell" aria-label="Checklist Alarm PWA">
       <section className="phone-frame">
@@ -315,6 +398,15 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
               onTouchStart={setTouchStartX}
               selectedDate={selectedCalendarDate}
               selectedTasks={selectedTasks}
+            />
+          ) : null}
+          {active.id === 'settings' ? (
+            <SettingsPanel
+              notificationPermission={notificationPermission}
+              onReminderSettingsChange={setReminderSettings}
+              onTestNotification={() => void handleTestNotification()}
+              reminderSettings={reminderSettings}
+              testNotificationMessage={testNotificationMessage}
             />
           ) : null}
         </section>
@@ -601,6 +693,66 @@ function CalendarPanel({
             ))}
           </ul>
         )}
+      </section>
+    </div>
+  );
+}
+
+type SettingsPanelProps = {
+  reminderSettings: ReminderSettings;
+  notificationPermission: NotificationPermissionView;
+  testNotificationMessage: string;
+  onReminderSettingsChange: (settings: ReminderSettings) => void;
+  onTestNotification: () => void;
+};
+
+function SettingsPanel({
+  reminderSettings,
+  notificationPermission,
+  testNotificationMessage,
+  onReminderSettingsChange,
+  onTestNotification,
+}: SettingsPanelProps) {
+  return (
+    <div className="settings-panel">
+      <section className="settings-card" aria-label="알림 시간 설정">
+        <h2>리마인더 시간</h2>
+        <label>
+          아침 알림 시간
+          <input
+            type="time"
+            value={reminderSettings.morningTime}
+            onChange={(event) => onReminderSettingsChange({ ...reminderSettings, morningTime: event.target.value })}
+          />
+        </label>
+        <label>
+          저녁 리뷰 시간
+          <input
+            type="time"
+            value={reminderSettings.eveningTime}
+            onChange={(event) => onReminderSettingsChange({ ...reminderSettings, eveningTime: event.target.value })}
+          />
+        </label>
+      </section>
+
+      <section className="settings-card" aria-label="알림 권한 상태">
+        <h2>알림 상태</h2>
+        <p className={`permission-pill permission-${notificationPermission}`}>
+          알림 권한: {notificationPermissionLabels[notificationPermission]}
+        </p>
+        <button className="test-notification-button" onClick={onTestNotification} type="button">
+          테스트 알림 보내기
+        </button>
+        {testNotificationMessage ? (
+          <p className="notification-feedback" role="status">
+            {testNotificationMessage}
+          </p>
+        ) : null}
+      </section>
+
+      <section className="storage-warning" aria-label="저장소 삭제 경고">
+        <h2>데이터 보관 안내</h2>
+        <p>브라우저 또는 PWA 저장소를 삭제하면 할 일, 반복 설정, 리마인더 시간이 이 기기에서 사라질 수 있습니다.</p>
       </section>
     </div>
   );
