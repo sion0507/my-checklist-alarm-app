@@ -128,12 +128,22 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const selectedDay = calendarMonth.days.find((day) => day.date === selectedCalendarDate);
   const selectedTasks = selectedDay?.tasks ?? [];
 
+  function selectCalendarMonth(date: Date) {
+    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    setCalendarDate(firstDayOfMonth);
+    setSelectedCalendarDate(formatDateKey(firstDayOfMonth));
+  }
+
   function changeCalendarMonth(delta: number) {
-    setCalendarDate((current) => addMonths(current, delta));
+    setCalendarDate((current) => {
+      const nextMonth = addMonths(current, delta);
+      setSelectedCalendarDate(formatDateKey(nextMonth));
+      return nextMonth;
+    });
   }
 
   function jumpCalendarMonth(year: number, monthIndex: number) {
-    setCalendarDate(new Date(year, monthIndex, 1));
+    selectCalendarMonth(new Date(year, monthIndex, 1));
   }
 
   function handleCalendarTouchEnd(x: number) {

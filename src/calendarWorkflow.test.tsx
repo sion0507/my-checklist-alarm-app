@@ -46,9 +46,16 @@ describe('Calendar month view workflow', () => {
 
     await user.click(screen.getByRole('button', { name: '다음 달' }));
     expect(screen.getByRole('heading', { name: 'July 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2026-07-01 일정' })).toBeInTheDocument();
+    await user.type(screen.getByLabelText('선택한 날짜에 할 일 추가'), '다음 달 선택 날짜 할 일');
+    await user.click(screen.getByRole('button', { name: '날짜에 추가' }));
+    expect(await listTasks()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: '다음 달 선택 날짜 할 일', date: '2026-07-01' })]),
+    );
 
     await user.selectOptions(screen.getByLabelText('연도 선택'), '2027');
     await user.selectOptions(screen.getByLabelText('월 선택'), '2');
     expect(screen.getByRole('heading', { name: 'March 2027' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2027-03-01 일정' })).toBeInTheDocument();
   });
 });
