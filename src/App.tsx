@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { addMonths, formatDateKey, getCalendarMonthDays, getVisibleTaskPills, weekdayHeaders, type CalendarMonth } from './calendarUtils';
+import { enablePushSubscription, sendBackendTestPush } from './pushClient';
 import {
   completeTaskOccurrence,
   createTask,
@@ -63,6 +64,7 @@ const recurrenceLabels: Record<Recurrence, string> = {
 };
 
 const reminderSettingsKey = 'checklist-alarm:reminder-settings';
+const pushSubscriptionEndpointKey = 'checklist-alarm:push-subscription-endpoint';
 
 const defaultReminderSettings: ReminderSettings = {
   morningTime: '08:00',
@@ -340,23 +342,24 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       return;
     }
 
-    let permission = Notification.permission;
-    if (permission === 'default') {
-      permission = await Notification.requestPermission();
+    try {
+      const result = await enablePushSubscription({
+        metadata: {
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          userAgent: navigator.userAgent,
+          morningTime: reminderSettings.morningTime,
+          eveningTime: reminderSettings.eveningTime,
+        },
+      });
+      localStorage.setItem(pushSubscriptionEndpointKey, result.endpoint);
+      setNotificationPermission(Notification.permission);
+      await sendBackendTestPush(result.endpoint);
+      setTestNotificationMessage('백엔드를 통해 테스트 푸시를 요청했습니다.');
+    } catch (error) {
+      setNotificationPermission(getNotificationPermission());
+      const message = error instanceof Error ? error.message : '테스트 푸시를 요청하지 못했습니다.';
+      setTestNotificationMessage(`테스트 푸시 실패: ${message}`);
     }
-    setNotificationPermission(permission);
-
-    if (permission === 'granted') {
-      try {
-        new Notification('Checklist Alarm 테스트', { body: '알림 설정이 동작합니다.' });
-        setTestNotificationMessage('테스트 알림을 보냈습니다.');
-      } catch {
-        setTestNotificationMessage('테스트 알림을 표시하지 못했습니다.');
-      }
-      return;
-    }
-
-    setTestNotificationMessage('알림 권한이 허용되지 않아 테스트 알림을 보낼 수 없습니다.');
   }
 
   return (

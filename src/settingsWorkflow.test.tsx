@@ -4,15 +4,52 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { clearTaskStoreForTests } from './taskStore';
 
-function stubNotification(permission: NotificationPermission, notificationMock = vi.fn()) {
-  const requestPermission = vi.fn().mockResolvedValue(permission);
-  const NotificationStub = vi.fn(function NotificationMock(this: unknown, title: string, options?: NotificationOptions) {
-    notificationMock(title, options);
-    return this;
+function stubNotification(permission: NotificationPermission, requestResult = permission) {
+  const requestPermission = vi.fn().mockResolvedValue(requestResult);
+  vi.stubGlobal('Notification', { permission, requestPermission });
+  return { requestPermission };
+}
+
+function stubServiceWorker() {
+  const subscribe = vi.fn().mockResolvedValue({
+    endpoint: 'https://push.example/settings-device',
+    toJSON: () => ({
+      endpoint: 'https://push.example/settings-device',
+      keys: { p256dh: 'settings-public-key', auth: 'settings-auth-secret' },
+    }),
   });
-  Object.assign(NotificationStub, { permission, requestPermission });
-  vi.stubGlobal('Notification', NotificationStub);
-  return { NotificationStub, requestPermission, notificationMock };
+  const registration = {
+    pushManager: {
+      getSubscription: vi.fn().mockResolvedValue(null),
+      subscribe,
+    },
+  };
+  Object.defineProperty(navigator, 'serviceWorker', {
+    configurable: true,
+    value: {
+      ready: Promise.resolve(registration),
+      register: vi.fn().mockResolvedValue(registration),
+    },
+  });
+  return { subscribe };
+}
+
+function stubPushBackend() {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/vapid-public-key')) {
+      return new Response(JSON.stringify({ publicKey: 'BElAQID' }), { status: 200 });
+    }
+    if (url.endsWith('/subscriptions')) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (url.endsWith('/test')) {
+      return new Response(JSON.stringify({ ok: true, status: 201 }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 describe('Settings reminders workflow', () => {
@@ -56,15 +93,19 @@ describe('Settings reminders workflow', () => {
     expect(screen.getByText('알림 권한: 차단됨')).toBeInTheDocument();
   });
 
-  it('uses the test notification control when permission is granted', async () => {
-    const { NotificationStub } = stubNotification('granted');
+  it('uses the backend push test notification flow when permission is granted', async () => {
+    stubNotification('granted');
+    const { subscribe } = stubServiceWorker();
+    const fetchMock = stubPushBackend();
     const user = userEvent.setup();
 
     render(<App />);
     await user.click(screen.getByRole('tab', { name: '설정' }));
     await user.click(screen.getByRole('button', { name: '테스트 알림 보내기' }));
 
-    expect(NotificationStub).toHaveBeenCalledWith('Checklist Alarm 테스트', expect.objectContaining({ body: '알림 설정이 동작합니다.' }));
-    expect(screen.getByRole('status')).toHaveTextContent('테스트 알림을 보냈습니다.');
+    expect(subscribe).toHaveBeenCalledWith({ userVisibleOnly: true, applicationServerKey: expect.any(Uint8Array) });
+    expect(fetchMock).toHaveBeenCalledWith('/api/push/subscriptions', expect.objectContaining({ method: 'PUT' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/push/test', expect.objectContaining({ method: 'POST' }));
+    expect(screen.getByRole('status')).toHaveTextContent('백엔드를 통해 테스트 푸시를 요청했습니다.');
   });
 });
