@@ -220,6 +220,241 @@ h1 {
   padding: 8px 10px;
 }
 
+.calendar-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.calendar-hero,
+.calendar-jump,
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-hero {
+  align-items: center;
+  background: linear-gradient(135deg, #111827, #2563eb);
+  border-radius: 26px;
+  color: #ffffff;
+  grid-template-columns: 1fr auto;
+  padding: 18px;
+}
+
+.calendar-caption {
+  color: #bfdbfe !important;
+  font-size: 0.72rem !important;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  margin: 0 0 6px !important;
+  text-transform: uppercase;
+}
+
+.calendar-hero h2 {
+  font-size: clamp(2rem, 11vw, 3.8rem);
+  letter-spacing: -0.08em;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.calendar-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.calendar-nav button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 900;
+  height: 38px;
+  width: 38px;
+}
+
+.calendar-jump {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  padding: 12px;
+}
+
+.calendar-jump label {
+  color: #475569;
+  display: grid;
+  font-size: 0.75rem;
+  font-weight: 800;
+  gap: 6px;
+}
+
+.calendar-jump select {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  color: #0f172a;
+  padding: 9px 10px;
+}
+
+.calendar-grid-wrap {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+}
+
+.calendar-weekdays {
+  background: #f1f5f9;
+}
+
+.weekday {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 9px 2px;
+  text-align: center;
+}
+
+.calendar-grid {
+  grid-auto-rows: minmax(76px, auto);
+}
+
+.calendar-day {
+  background: #ffffff;
+  border: 0;
+  border-right: 1px solid #e2e8f0;
+  border-top: 1px solid #e2e8f0;
+  color: #0f172a;
+  min-width: 0;
+  padding: 6px 4px;
+  position: relative;
+}
+
+.calendar-day:nth-child(7n) {
+  border-right: 0;
+}
+
+.calendar-day.adjacent-month {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.calendar-day.weekend .day-number {
+  color: #ef4444;
+}
+
+.calendar-day.today .day-number,
+.calendar-day.selected .day-number {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.calendar-day.selected {
+  box-shadow: inset 0 0 0 2px #2563eb;
+}
+
+.day-number {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.date-marker {
+  color: #b45309;
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marker-anniversary .date-marker {
+  color: #db2777;
+}
+
+.task-pill-stack {
+  display: grid;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.task-pill,
+.more-pill {
+  border-radius: 999px;
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  padding: 3px 5px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-pill {
+  background: #dbeafe;
+  border: 0;
+  color: #1d4ed8;
+  width: 100%;
+}
+
+.more-pill {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.selected-date-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.selected-date-panel h2 {
+  color: #0f172a;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.calendar-empty {
+  color: #64748b !important;
+  font-size: 0.88rem !important;
+  margin: 0 !important;
+}
+
+.selected-task-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.selected-task-list button {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  color: #0f172a;
+  font-weight: 800;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
 .modal-backdrop {
   align-items: center;
   background: rgba(15, 23, 42, 0.38);
