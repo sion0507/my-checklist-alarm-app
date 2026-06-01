@@ -109,4 +109,69 @@ describe('push backend API behavior', () => {
       ),
     ).resolves.toEqual({ status: 200, body: { ok: true, status: 201 } });
   });
+
+  it('replaces scheduled jobs with minimal derived metadata and marks missing jobs cancelled', async () => {
+    const backend = createPushBackend({ vapidPublicKey: 'public-key', now: () => new Date('2026-06-01T00:00:00.000Z') });
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T08:00:00',
+          metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+        },
+        {
+          jobId: 'task:task-1:2026-06-01',
+          kind: 'task',
+          scheduledFor: '2026-06-01T09:30:00',
+          metadata: { taskId: 'task-1', occurrenceDate: '2026-06-01', title: '할 일', path: '/?date=2026-06-01' },
+          ignoredLocalTask: { memo: 'must not be stored', completed: false },
+        },
+      ],
+    });
+
+    await expect(
+      backend.replaceScheduledJobs({
+        endpoint: 'https://push.example/device-1',
+        jobs: [
+          {
+            jobId: 'morning:2026-06-01',
+            kind: 'morning',
+            scheduledFor: '2026-06-01T08:00:00',
+            metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+          },
+        ],
+      }),
+    ).resolves.toEqual({ ok: true, upserted: 1, cancelled: 1 });
+
+    const records = backend.listScheduledJobs('https://push.example/device-1');
+    expect(records).toContainEqual(expect.objectContaining({ jobId: 'morning:2026-06-01', state: 'scheduled' }));
+    expect(records).toContainEqual(expect.objectContaining({ jobId: 'task:task-1:2026-06-01', state: 'cancelled' }));
+    expect(JSON.stringify(records)).not.toContain('must not be stored');
+    expect(JSON.stringify(records)).not.toContain('completed');
+  });
+
+  it('serves schedule replacement through the HTTP API', async () => {
+    const api = createPushHttpApi({ vapidPublicKey: 'public-key' });
+
+    await expect(
+      api.handle(
+        new Request('https://app.example/api/push/schedule', {
+          method: 'POST',
+          body: JSON.stringify({
+            endpoint: 'https://push.example/device-1',
+            jobs: [
+              {
+                jobId: 'evening:2026-06-01',
+                kind: 'evening',
+                scheduledFor: '2026-06-01T23:00:00',
+                metadata: { title: '저녁 리뷰', path: '/?date=2026-06-01' },
+              },
+            ],
+          }),
+        }),
+      ),
+    ).resolves.toEqual({ status: 200, body: { ok: true, upserted: 1, cancelled: 0 } });
+  });
 });

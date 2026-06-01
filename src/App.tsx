@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { addMonths, formatDateKey, getCalendarMonthDays, getVisibleTaskPills, weekdayHeaders, type CalendarMonth } from './calendarUtils';
+import { buildSevenDayNotificationSchedule } from './notificationPlanner';
 import { enablePushSubscription, sendBackendTestPush } from './pushClient';
+import { syncUpcomingNotificationSchedule } from './scheduleSyncClient';
 import {
   completeTaskOccurrence,
   createTask,
@@ -163,11 +165,26 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
 
+  async function syncNotificationSchedule(storedTasks: Task[]) {
+    const endpoint = localStorage.getItem(pushSubscriptionEndpointKey);
+    const jobs = buildSevenDayNotificationSchedule({
+      tasks: storedTasks,
+      settings: reminderSettings,
+      startDate: formatDateKey(initialCalendarDate),
+    });
+    try {
+      await syncUpcomingNotificationSchedule({ endpoint, jobs });
+    } catch (error) {
+      console.warn('Notification schedule sync failed', error);
+    }
+  }
+
   async function refreshTasks() {
     const today = getTodayDateString();
     const [todayOccurrences, storedTasks] = await Promise.all([listTaskOccurrencesForDate(today), listTasks()]);
     setTasks(todayOccurrences);
     setAllTasks(storedTasks);
+    await syncNotificationSchedule(storedTasks);
   }
 
   useEffect(() => {

@@ -28,6 +28,27 @@ export type PushPayload = {
   path: string;
 };
 
+export type ScheduledNotificationRecord = {
+  endpoint: string;
+  jobId: string;
+  kind: 'morning' | 'evening' | 'task';
+  scheduledFor: string;
+  metadata: {
+    title: string;
+    path: string;
+    taskId?: string;
+    occurrenceDate?: string;
+  };
+  state: 'scheduled' | 'cancelled' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt?: string;
+};
+
+type ScheduledNotificationInput = Pick<ScheduledNotificationRecord, 'jobId' | 'kind' | 'scheduledFor' | 'metadata'> & {
+  [ignoredLocalData: string]: unknown;
+};
+
 type SendPushResult = {
   ok: boolean;
   status?: number;
@@ -66,6 +87,7 @@ export function createPushPayload(payload: PushPayload): PushPayload {
 
 export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Date() }: PushBackendOptions) {
   const subscriptions = new Map<string, StoredPushSubscription>();
+  const scheduledJobs = new Map<string, ScheduledNotificationRecord>();
 
   return {
     getVapidPublicKey() {
@@ -116,6 +138,59 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
           path: '/?source=test-push',
         }),
       );
+    },
+
+    async replaceScheduledJobs({ endpoint, jobs }: { endpoint: string; jobs: ScheduledNotificationInput[] }) {
+      if (!endpoint) {
+        throw new Error('Push subscription endpoint is required');
+      }
+
+      const timestamp = now().toISOString();
+      const incomingIds = new Set(jobs.map((job) => job.jobId));
+      let cancelled = 0;
+
+      for (const record of scheduledJobs.values()) {
+        if (record.endpoint === endpoint && record.state === 'scheduled' && !incomingIds.has(record.jobId)) {
+          scheduledJobs.set(`${endpoint}:${record.jobId}`, {
+            ...record,
+            state: 'cancelled',
+            updatedAt: timestamp,
+            cancelledAt: timestamp,
+          });
+          cancelled += 1;
+        }
+      }
+
+      for (const job of jobs) {
+        const key = `${endpoint}:${job.jobId}`;
+        const previous = scheduledJobs.get(key);
+        scheduledJobs.set(key, {
+          endpoint,
+          jobId: job.jobId,
+          kind: job.kind,
+          scheduledFor: job.scheduledFor,
+          metadata: {
+            title: job.metadata.title,
+            path: job.metadata.path,
+            taskId: job.metadata.taskId,
+            occurrenceDate: job.metadata.occurrenceDate,
+          },
+          state: 'scheduled',
+          createdAt: previous?.createdAt ?? timestamp,
+          updatedAt: timestamp,
+        });
+      }
+
+      return { ok: true, upserted: jobs.length, cancelled };
+    },
+
+    listScheduledJobs(endpoint: string) {
+      return [...scheduledJobs.values()]
+        .filter((record) => record.endpoint === endpoint)
+        .sort((a, b) => {
+          const first = a.scheduledFor.localeCompare(b.scheduledFor);
+          return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
+        });
     },
   };
 }

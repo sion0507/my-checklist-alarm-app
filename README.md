@@ -29,6 +29,16 @@ Issue #3 implements the local Today task workflow:
 - Completed tasks stay visible with checked/de-emphasized styling
 - Unit tests for persistence/store behavior and Today workflow coverage
 
+### Issue #9: Seven-day notification schedule planner and sync
+
+Issue #9 derives backend notification jobs from local checklist data while keeping the local task store as source of truth:
+
+- `src/notificationPlanner.ts` builds a next-seven-days schedule containing daily morning jobs, daily evening jobs, and notification-enabled time-specific task occurrence jobs
+- Recurring task occurrences use the same projection rules as the UI and skip completed, deleted, moved-away, notification-off, and no-time task occurrences
+- `src/scheduleSyncClient.ts` sends only the push subscription endpoint plus derived job metadata to `/api/push/schedule`; local task memo/completion/full records are not sent
+- `src/pushBackend.ts` stores scheduled notification records as minimal metadata with `scheduled`/`cancelled`/`completed` state support, and schedule replacement cancels previously active jobs that disappear from the seven-day derived schedule
+- App startup and task mutations call reconciliation sync when a push subscription endpoint exists locally
+
 ### Issue #8: Minimal free-tier push backend and subscription flow
 
 Issue #8 adds the first Web Push subscription plumbing without copying the local task database to the backend:
