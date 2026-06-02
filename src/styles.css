@@ -104,6 +104,7 @@ h1 {
 }
 
 .quick-add label,
+.morning-quick-add label,
 .task-modal label {
   color: #334155;
   display: grid;
@@ -120,6 +121,7 @@ h1 {
 }
 
 .quick-add input,
+.morning-quick-add input,
 .task-modal input,
 .task-modal select,
 .task-modal textarea {
@@ -132,6 +134,7 @@ h1 {
 }
 
 .quick-add button,
+.morning-quick-add button,
 .modal-actions button {
   background: #2563eb;
   border: 0;
@@ -139,6 +142,74 @@ h1 {
   color: #ffffff;
   font-weight: 800;
   padding: 0 16px;
+}
+
+.morning-check-in {
+  background: linear-gradient(135deg, #fef3c7, #dbeafe);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 24px;
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.morning-check-in-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.morning-check-in h2 {
+  color: #0f172a;
+  font-size: 1.35rem;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+
+.morning-kicker {
+  color: #92400e !important;
+  font-size: 0.72rem !important;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  margin: 0 0 4px !important;
+  text-transform: uppercase;
+}
+
+.morning-check-in-header button {
+  background: #0f172a;
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+
+.morning-summary,
+.morning-empty {
+  color: #334155 !important;
+  font-weight: 700;
+  margin: 0 !important;
+}
+
+.morning-task-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.morning-task-list li {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.morning-quick-add {
+  display: grid;
+  gap: 8px;
 }
 
 .empty-state {

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { addMonths, formatDateKey, getCalendarMonthDays, getVisibleTaskPills, weekdayHeaders, type CalendarMonth } from './calendarUtils';
 import { buildSevenDayNotificationSchedule } from './notificationPlanner';
 import { enablePushSubscription, sendBackendTestPush } from './pushClient';
@@ -67,6 +67,7 @@ const recurrenceLabels: Record<Recurrence, string> = {
 
 const reminderSettingsKey = 'checklist-alarm:reminder-settings';
 const pushSubscriptionEndpointKey = 'checklist-alarm:push-subscription-endpoint';
+const morningCheckInStateKey = 'checklist-alarm:morning-check-in-state';
 
 const defaultReminderSettings: ReminderSettings = {
   morningTime: '08:00',
@@ -79,6 +80,8 @@ type ReminderSettings = {
 };
 
 type NotificationPermissionView = NotificationPermission | 'unsupported';
+
+type MorningCheckInState = Record<string, 'done'>;
 
 const notificationPermissionLabels: Record<NotificationPermissionView, string> = {
   default: '권한 요청 필요',
@@ -109,6 +112,19 @@ function loadReminderSettings(): ReminderSettings {
 
 function saveReminderSettings(settings: ReminderSettings) {
   localStorage.setItem(reminderSettingsKey, JSON.stringify(settings));
+}
+
+function loadMorningCheckInState(): MorningCheckInState {
+  try {
+    const stored = localStorage.getItem(morningCheckInStateKey);
+    return stored ? (JSON.parse(stored) as MorningCheckInState) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveMorningCheckInState(state: MorningCheckInState) {
+  localStorage.setItem(morningCheckInStateKey, JSON.stringify(state));
 }
 
 function getNotificationPermission(): NotificationPermissionView {
@@ -154,6 +170,8 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [tasks, setTasks] = useState<TaskOccurrence[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [quickTitle, setQuickTitle] = useState('');
+  const [morningQuickTitle, setMorningQuickTitle] = useState('');
+  const [morningCheckInState, setMorningCheckInState] = useState(loadMorningCheckInState);
   const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
   const [calendarDate, setCalendarDate] = useState(() => new Date(initialCalendarDate.getFullYear(), initialCalendarDate.getMonth(), 1));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => formatDateKey(initialCalendarDate));
@@ -163,14 +181,16 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<TaskOccurrence | null>(null);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
+  const didInitializeReminderSettings = useRef(false);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
+  const appToday = formatDateKey(initialCalendarDate);
 
   async function syncNotificationSchedule(storedTasks: Task[]) {
     const endpoint = localStorage.getItem(pushSubscriptionEndpointKey);
     const jobs = buildSevenDayNotificationSchedule({
       tasks: storedTasks,
       settings: reminderSettings,
-      startDate: formatDateKey(initialCalendarDate),
+      startDate: appToday,
     });
     try {
       await syncUpcomingNotificationSchedule({ endpoint, jobs });
@@ -180,11 +200,18 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   async function refreshTasks() {
-    const today = getTodayDateString();
+    const today = appToday;
     const [todayOccurrences, storedTasks] = await Promise.all([listTaskOccurrencesForDate(today), listTasks()]);
     setTasks(todayOccurrences);
     setAllTasks(storedTasks);
     await syncNotificationSchedule(storedTasks);
+  }
+
+  async function resyncNotificationScheduleFromStore() {
+    if (!localStorage.getItem(pushSubscriptionEndpointKey)) {
+      return;
+    }
+    await syncNotificationSchedule(await listTasks());
   }
 
   useEffect(() => {
@@ -193,9 +220,16 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
   useEffect(() => {
     saveReminderSettings(reminderSettings);
+    if (!didInitializeReminderSettings.current) {
+      didInitializeReminderSettings.current = true;
+      return;
+    }
+    void resyncNotificationScheduleFromStore();
   }, [reminderSettings]);
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
+  const todayDate = appToday;
+  const showMorningCheckIn = morningCheckInState[todayDate] !== 'done';
   const calendarMonth = useMemo(
     () => getCalendarMonthDays(calendarDate.getFullYear(), calendarDate.getMonth(), allTasks, getTodayDateString()),
     [allTasks, calendarDate],
@@ -268,7 +302,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
     await createTask({
       title,
-      date: getTodayDateString(),
+      date: appToday,
       time: '',
       recurrence: 'none',
       memo: '',
@@ -276,6 +310,33 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     });
     setQuickTitle('');
     await refreshTasks();
+  }
+
+  async function handleMorningQuickAdd(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = morningQuickTitle.trim();
+    if (!title) {
+      return;
+    }
+
+    await createTask({
+      title,
+      date: appToday,
+      time: '',
+      recurrence: 'none',
+      memo: '',
+      notify: false,
+    });
+    setMorningQuickTitle('');
+    await refreshTasks();
+  }
+
+  function completeMorningCheckIn() {
+    setMorningCheckInState((current) => {
+      const next = { ...current, [appToday]: 'done' as const };
+      saveMorningCheckInState(next);
+      return next;
+    });
   }
 
   function openEditModal(task: TaskOccurrence) {
@@ -370,6 +431,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       });
       localStorage.setItem(pushSubscriptionEndpointKey, result.endpoint);
       setNotificationPermission(Notification.permission);
+      await resyncNotificationScheduleFromStore();
       await sendBackendTestPush(result.endpoint);
       setTestNotificationMessage('백엔드를 통해 테스트 푸시를 요청했습니다.');
     } catch (error) {
@@ -397,10 +459,15 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
             <TodayPanel
               onDeleteTask={handleDeleteTask}
               onEditTask={openEditModal}
+              onMorningCheckInComplete={completeMorningCheckIn}
+              onMorningQuickAdd={handleMorningQuickAdd}
+              onMorningQuickTitleChange={setMorningQuickTitle}
               onQuickAdd={handleQuickAdd}
               onQuickTitleChange={setQuickTitle}
               onToggleComplete={handleToggleComplete}
               quickTitle={quickTitle}
+              morningQuickTitle={morningQuickTitle}
+              showMorningCheckIn={showMorningCheckIn}
               tasks={todayTasks}
             />
           ) : null}
@@ -470,8 +537,13 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 type TodayPanelProps = {
   tasks: TaskOccurrence[];
   quickTitle: string;
+  morningQuickTitle: string;
+  showMorningCheckIn: boolean;
   onQuickTitleChange: (value: string) => void;
   onQuickAdd: (event: FormEvent<HTMLFormElement>) => void;
+  onMorningQuickTitleChange: (value: string) => void;
+  onMorningQuickAdd: (event: FormEvent<HTMLFormElement>) => void;
+  onMorningCheckInComplete: () => void;
   onToggleComplete: (task: TaskOccurrence) => void;
   onEditTask: (task: TaskOccurrence) => void;
   onDeleteTask: (task: TaskOccurrence) => void;
@@ -480,14 +552,57 @@ type TodayPanelProps = {
 function TodayPanel({
   tasks,
   quickTitle,
+  morningQuickTitle,
+  showMorningCheckIn,
   onQuickTitleChange,
   onQuickAdd,
+  onMorningQuickTitleChange,
+  onMorningQuickAdd,
+  onMorningCheckInComplete,
   onToggleComplete,
   onEditTask,
   onDeleteTask,
 }: TodayPanelProps) {
   return (
     <div className="today-panel">
+      {showMorningCheckIn ? (
+        <section className="morning-check-in" aria-label="아침 체크인 카드">
+          <div className="morning-check-in-header">
+            <div>
+              <p className="morning-kicker">Morning</p>
+              <h2>아침 체크인</h2>
+            </div>
+            <button onClick={onMorningCheckInComplete} type="button">
+              오늘 체크인 완료
+            </button>
+          </div>
+          <p className="morning-summary">오늘 할 일 {tasks.length}개를 확인해 보세요.</p>
+          {tasks.length > 0 ? (
+            <ul className="morning-task-list" aria-label="아침 체크인 오늘 할 일 요약">
+              {tasks.slice(0, 4).map((task) => (
+                <li key={`${task.id}:${task.occurrenceDate ?? task.date}`}>• {task.title}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="morning-empty">아직 등록된 오늘 할 일이 없습니다.</p>
+          )}
+          <form className="morning-quick-add" onSubmit={onMorningQuickAdd}>
+            <label htmlFor="morning-quick-add-title">추가할 일이 더 있나요?</label>
+            <div className="quick-add-row">
+              <input
+                id="morning-quick-add-title"
+                aria-label="아침 체크인 빠른 추가"
+                onChange={(event) => onMorningQuickTitleChange(event.target.value)}
+                placeholder="예: 물 마시기"
+                type="text"
+                value={morningQuickTitle}
+              />
+              <button type="submit">체크인에서 추가</button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
       <form className="quick-add" onSubmit={onQuickAdd}>
         <label htmlFor="quick-add-title">오늘 할 일 빠른 추가</label>
         <div className="quick-add-row">

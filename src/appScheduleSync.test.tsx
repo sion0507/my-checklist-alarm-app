@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -35,5 +35,31 @@ describe('App notification schedule sync triggers', () => {
     const completionCall = fetchMock.mock.calls.at(-1) as unknown as [RequestInfo | URL, RequestInit];
     const completionBody = JSON.parse(completionCall[1].body as string);
     expect(completionBody.jobs.some((job: { kind: string }) => job.kind === 'task')).toBe(false);
+  });
+
+  it('reconciles upcoming jobs immediately when reminder settings change with a stored endpoint', async () => {
+    localStorage.setItem('checklist-alarm:push-subscription-endpoint', 'https://push.example/device-1');
+    localStorage.setItem('checklist-alarm:reminder-settings', JSON.stringify({ morningTime: '08:00', eveningTime: '23:00' }));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, upserted: 14, cancelled: 0 }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<App initialCalendarDate={new Date('2026-06-01T12:00:00')} />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/push/schedule', expect.any(Object)));
+    await user.click(screen.getByRole('tab', { name: '설정' }));
+    fireEvent.change(screen.getByLabelText('아침 알림 시간'), { target: { value: '07:30' } });
+
+    await waitFor(() => {
+      const latestCall = fetchMock.mock.calls.at(-1) as unknown as [RequestInfo | URL, RequestInit];
+      const latestBody = JSON.parse(latestCall[1].body as string);
+      expect(latestBody.jobs).toContainEqual(
+        expect.objectContaining({
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T07:30:00',
+        }),
+      );
+    });
   });
 });
