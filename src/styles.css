@@ -212,6 +212,114 @@ h1 {
   gap: 8px;
 }
 
+.evening-review-card {
+  background: linear-gradient(135deg, #ede9fe, #f8fafc);
+  border: 1px solid rgba(124, 58, 237, 0.28);
+  border-radius: 24px;
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.evening-review-header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.evening-review-header h2 {
+  color: #0f172a;
+  font-size: 1.35rem;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+
+.evening-kicker {
+  color: #5b21b6 !important;
+  font-size: 0.72rem !important;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  margin: 0 0 4px !important;
+  text-transform: uppercase;
+}
+
+.evening-empty {
+  color: #334155 !important;
+  font-weight: 700;
+  margin: 0 !important;
+}
+
+.evening-review-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.evening-review-list li {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #ddd6fe;
+  border-radius: 18px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.evening-review-list strong,
+.evening-review-list span {
+  display: block;
+}
+
+.evening-review-list strong {
+  color: #0f172a;
+}
+
+.evening-review-list span {
+  color: #64748b;
+  font-size: 0.78rem;
+  margin-top: 3px;
+}
+
+.evening-review-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.evening-review-actions button,
+.evening-review-actions input {
+  border-radius: 12px;
+  font-weight: 800;
+  padding: 9px 10px;
+}
+
+.evening-review-actions button {
+  background: #4f46e5;
+  border: 0;
+  color: #ffffff;
+}
+
+.evening-review-actions .danger-button {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.evening-review-actions label {
+  color: #334155;
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 6px;
+}
+
+.evening-review-actions input {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
 .empty-state {
   background: #eff6ff;
   border: 1px solid #bfdbfe;
