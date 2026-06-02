@@ -43,6 +43,9 @@ function stubPushBackend() {
     if (url.endsWith('/subscriptions')) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
+    if (url.endsWith('/schedule')) {
+      return new Response(JSON.stringify({ ok: true, upserted: 14, cancelled: 0 }), { status: 200 });
+    }
     if (url.endsWith('/test')) {
       return new Response(JSON.stringify({ ok: true, status: 201 }), { status: 200 });
     }
@@ -105,7 +108,8 @@ describe('Settings reminders workflow', () => {
 
     expect(subscribe).toHaveBeenCalledWith({ userVisibleOnly: true, applicationServerKey: expect.any(Uint8Array) });
     expect(fetchMock).toHaveBeenCalledWith('/api/push/subscriptions', expect.objectContaining({ method: 'PUT' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/push/schedule', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/push/test', expect.objectContaining({ method: 'POST' }));
-    expect(screen.getByRole('status')).toHaveTextContent('백엔드를 통해 테스트 푸시를 요청했습니다.');
+    expect(await screen.findByRole('status')).toHaveTextContent('백엔드를 통해 테스트 푸시를 요청했습니다.');
   });
 });

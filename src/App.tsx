@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { addMonths, formatDateKey, getCalendarMonthDays, getVisibleTaskPills, weekdayHeaders, type CalendarMonth } from './calendarUtils';
 import { buildSevenDayNotificationSchedule } from './notificationPlanner';
 import { enablePushSubscription, sendBackendTestPush } from './pushClient';
@@ -181,6 +181,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<TaskOccurrence | null>(null);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
+  const didInitializeReminderSettings = useRef(false);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const appToday = formatDateKey(initialCalendarDate);
 
@@ -206,12 +207,24 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     await syncNotificationSchedule(storedTasks);
   }
 
+  async function resyncNotificationScheduleFromStore() {
+    if (!localStorage.getItem(pushSubscriptionEndpointKey)) {
+      return;
+    }
+    await syncNotificationSchedule(await listTasks());
+  }
+
   useEffect(() => {
     void refreshTasks();
   }, []);
 
   useEffect(() => {
     saveReminderSettings(reminderSettings);
+    if (!didInitializeReminderSettings.current) {
+      didInitializeReminderSettings.current = true;
+      return;
+    }
+    void resyncNotificationScheduleFromStore();
   }, [reminderSettings]);
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
@@ -418,6 +431,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       });
       localStorage.setItem(pushSubscriptionEndpointKey, result.endpoint);
       setNotificationPermission(Notification.permission);
+      await resyncNotificationScheduleFromStore();
       await sendBackendTestPush(result.endpoint);
       setTestNotificationMessage('백엔드를 통해 테스트 푸시를 요청했습니다.');
     } catch (error) {
