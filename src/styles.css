@@ -245,6 +245,83 @@ h1 {
   text-decoration: line-through;
 }
 
+.notification-entry-card {
+  background: linear-gradient(135deg, #ecfeff, #eff6ff);
+  border: 1px solid #bae6fd;
+  border-radius: 22px;
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.notification-entry-kicker {
+  color: #0369a1 !important;
+  font-size: 0.72rem !important;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  margin: 0 !important;
+  text-transform: uppercase;
+}
+
+.notification-entry-card h2 {
+  color: #0f172a;
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.notification-entry-copy,
+.notification-entry-status {
+  color: #334155 !important;
+  font-size: 0.88rem !important;
+  line-height: 1.5;
+  margin: 0 !important;
+}
+
+.notification-entry-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.notification-entry-actions button,
+.notification-entry-actions input {
+  border-radius: 12px;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+.notification-entry-actions button {
+  background: #2563eb;
+  border: 0;
+  color: #ffffff;
+}
+
+.notification-entry-actions .danger-button {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.notification-entry-actions label {
+  color: #334155;
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 6px;
+}
+
+.notification-entry-actions input {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+.notification-highlight,
+.selected-task-list .notification-highlight button {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+}
+
 .task-check {
   align-items: center;
   color: #0f172a;

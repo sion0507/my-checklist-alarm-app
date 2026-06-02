@@ -12,6 +12,7 @@ import {
   listTaskOccurrencesForDate,
   listTasks,
   moveTaskOccurrence,
+  projectTasksForDate,
   Recurrence,
   Task,
   TaskOccurrence,
@@ -81,6 +82,16 @@ type ReminderSettings = {
 
 type NotificationPermissionView = NotificationPermission | 'unsupported';
 
+type NotificationEntryState = {
+  taskId: string;
+  date: string;
+  occurrenceDate: string;
+};
+
+type NotificationActionStatus = {
+  message: string;
+};
+
 type MorningCheckInState = Record<string, 'done'>;
 
 const notificationPermissionLabels: Record<NotificationPermissionView, string> = {
@@ -141,6 +152,21 @@ function sortIncompleteFirst<T extends Task>(tasks: T[]) {
   });
 }
 
+function loadNotificationEntry(): NotificationEntryState | null {
+  const params = new URLSearchParams(window.location.search);
+  const taskId = params.get('taskId');
+  const date = params.get('date');
+  const occurrenceDate = params.get('occurrenceDate') ?? date;
+  if (params.get('entry') !== 'notification' || !taskId || !date || !occurrenceDate) {
+    return null;
+  }
+  return { taskId, date, occurrenceDate };
+}
+
+function notificationTaskKey(entry: NotificationEntryState | null) {
+  return entry ? `${entry.taskId}:${entry.occurrenceDate}` : '';
+}
+
 function emptyTaskForm(): TaskFormState {
   return {
     title: '',
@@ -166,15 +192,22 @@ type AppProps = {
 };
 
 export default function App({ initialCalendarDate = new Date() }: AppProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('today');
+  const initialNotificationEntry = loadNotificationEntry();
+  const [notificationEntry, setNotificationEntry] = useState<NotificationEntryState | null>(initialNotificationEntry);
+  const [notificationActionStatus, setNotificationActionStatus] = useState<NotificationActionStatus | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>(initialNotificationEntry ? 'calendar' : 'today');
   const [tasks, setTasks] = useState<TaskOccurrence[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [quickTitle, setQuickTitle] = useState('');
   const [morningQuickTitle, setMorningQuickTitle] = useState('');
   const [morningCheckInState, setMorningCheckInState] = useState(loadMorningCheckInState);
   const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
-  const [calendarDate, setCalendarDate] = useState(() => new Date(initialCalendarDate.getFullYear(), initialCalendarDate.getMonth(), 1));
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => formatDateKey(initialCalendarDate));
+  const [calendarDate, setCalendarDate] = useState(() => {
+    const initialDate = initialNotificationEntry?.date ? new Date(`${initialNotificationEntry.date}T00:00:00`) : initialCalendarDate;
+    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+  });
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate));
+  const [notificationMoveDate, setNotificationMoveDate] = useState(() => initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate));
   const [reminderSettings, setReminderSettings] = useState(loadReminderSettings);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionView>(getNotificationPermission);
   const [testNotificationMessage, setTestNotificationMessage] = useState('');
@@ -236,6 +269,12 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   );
   const selectedDay = calendarMonth.days.find((day) => day.date === selectedCalendarDate);
   const selectedTasks = selectedDay?.tasks ?? [];
+  const highlightedTaskKey = notificationTaskKey(notificationEntry);
+  const notificationTask = notificationEntry
+    ? projectTasksForDate(allTasks, notificationEntry.date).find(
+        (task) => task.id === notificationEntry.taskId && task.occurrenceDate === notificationEntry.occurrenceDate,
+      ) ?? null
+    : null;
 
   function selectCalendarMonth(date: Date) {
     const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -412,6 +451,53 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     await refreshTasks();
   }
 
+  async function handleCompleteNotificationTask(task: TaskOccurrence) {
+    if (task.isRecurringOccurrence) {
+      await completeTaskOccurrence(task.id, task.occurrenceDate, true);
+    } else {
+      await updateTask(task.id, { completed: true });
+    }
+    setNotificationActionStatus({ message: `${task.title} 완료 처리했습니다.` });
+    await refreshTasks();
+  }
+
+  async function handleDeleteNotificationTask(task: TaskOccurrence) {
+    if (task.isRecurringOccurrence) {
+      await deleteTaskOccurrence(task.id, task.occurrenceDate);
+    } else {
+      await deleteTask(task.id);
+    }
+    setNotificationEntry(null);
+    setNotificationActionStatus({ message: `${task.title} 삭제했습니다.` });
+    await refreshTasks();
+  }
+
+  async function handleMoveNotificationTask(task: TaskOccurrence) {
+    if (!notificationMoveDate) {
+      return;
+    }
+    if (task.isRecurringOccurrence) {
+      await moveTaskOccurrence(task.id, task.occurrenceDate, notificationMoveDate);
+    } else {
+      await updateTask(task.id, { date: notificationMoveDate });
+    }
+    const movedEntry = {
+      taskId: task.id,
+      date: notificationMoveDate,
+      occurrenceDate: task.isRecurringOccurrence ? task.occurrenceDate : notificationMoveDate,
+    };
+    setNotificationEntry(movedEntry);
+    setNotificationActionStatus({ message: `${task.title} ${notificationMoveDate}로 이동했습니다.` });
+    selectCalendarMonth(new Date(`${notificationMoveDate}T00:00:00`));
+    setSelectedCalendarDate(notificationMoveDate);
+    window.history.replaceState(
+      {},
+      '',
+      `/?date=${notificationMoveDate}&taskId=${encodeURIComponent(movedEntry.taskId)}&occurrenceDate=${encodeURIComponent(movedEntry.occurrenceDate)}&entry=notification`,
+    );
+    await refreshTasks();
+  }
+
   async function handleTestNotification() {
     setTestNotificationMessage('');
     if (!('Notification' in window)) {
@@ -455,6 +541,17 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
             {active.title}
           </p>
           <p>{active.description}</p>
+          {notificationEntry || notificationActionStatus ? (
+            <NotificationEntryPanel
+              moveDate={notificationMoveDate}
+              onComplete={handleCompleteNotificationTask}
+              onDelete={handleDeleteNotificationTask}
+              onMove={handleMoveNotificationTask}
+              onMoveDateChange={setNotificationMoveDate}
+              status={notificationActionStatus?.message ?? ''}
+              task={notificationTask}
+            />
+          ) : null}
           {active.id === 'today' ? (
             <TodayPanel
               onDeleteTask={handleDeleteTask}
@@ -474,6 +571,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           {active.id === 'calendar' ? (
             <CalendarPanel
               calendarQuickTitle={calendarQuickTitle}
+              highlightedTaskKey={highlightedTaskKey}
               month={calendarMonth}
               onAddTask={handleCalendarQuickAdd}
               onJumpMonth={jumpCalendarMonth}
@@ -531,6 +629,68 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
         />
       ) : null}
     </main>
+  );
+}
+
+type NotificationEntryPanelProps = {
+  task: TaskOccurrence | null;
+  moveDate: string;
+  status: string;
+  onMoveDateChange: (date: string) => void;
+  onComplete: (task: TaskOccurrence) => void;
+  onDelete: (task: TaskOccurrence) => void;
+  onMove: (task: TaskOccurrence) => void;
+};
+
+function NotificationEntryPanel({
+  task,
+  moveDate,
+  status,
+  onMoveDateChange,
+  onComplete,
+  onDelete,
+  onMove,
+}: NotificationEntryPanelProps) {
+  return (
+    <section className="notification-entry-card" aria-label="알림에서 열린 할 일">
+      <p className="notification-entry-kicker">Notification entry</p>
+      {task ? (
+        <>
+          <h2>
+            {task.time ? `${task.time} ` : ''}
+            {task.title}
+          </h2>
+          <p className="notification-entry-copy">알림을 눌러 연 할 일입니다. 바로 처리하거나 날짜를 옮길 수 있습니다.</p>
+          <div className="notification-entry-actions" aria-label={`${task.title} 알림 빠른 작업`}>
+            <button onClick={() => onComplete(task)} type="button">
+              {task.title} 완료
+            </button>
+            <button className="danger-button" onClick={() => onDelete(task)} type="button">
+              {task.title} 삭제
+            </button>
+            <label>
+              이동할 날짜
+              <input
+                aria-label={`${task.title} 이동할 날짜`}
+                onChange={(event) => onMoveDateChange(event.target.value)}
+                type="date"
+                value={moveDate}
+              />
+            </label>
+            <button onClick={() => onMove(task)} type="button">
+              {task.title} 이동
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="notification-entry-copy">알림과 연결된 할 일을 찾을 수 없습니다.</p>
+      )}
+      {status ? (
+        <p className="notification-entry-status" role="status">
+          {status}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -663,6 +823,7 @@ type CalendarPanelProps = {
   month: CalendarMonth;
   selectedDate: string;
   selectedTasks: TaskOccurrence[];
+  highlightedTaskKey: string;
   calendarQuickTitle: string;
   onMonthChange: (delta: number) => void;
   onJumpMonth: (year: number, monthIndex: number) => void;
@@ -678,6 +839,7 @@ function CalendarPanel({
   month,
   selectedDate,
   selectedTasks,
+  highlightedTaskKey,
   calendarQuickTitle,
   onMonthChange,
   onJumpMonth,
@@ -776,21 +938,25 @@ function CalendarPanel({
                 <span className="day-number">{day.dayNumber}</span>
                 {day.markerLabel ? <span className="date-marker">{day.markerLabel}</span> : null}
                 <div className="task-pill-stack">
-                  {visible.map((task) => (
-                    <button
-                      aria-label={`${task.title} 상세 열기`}
-                      className="task-pill"
-                      key={`${task.id}:${task.occurrenceDate}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onOpenTask(task);
-                      }}
-                      type="button"
-                    >
-                      {task.time ? `${task.time} ` : ''}
-                      {task.title}
-                    </button>
-                  ))}
+                  {visible.map((task) => {
+                    const taskKey = `${task.id}:${task.occurrenceDate}`;
+                    const isHighlighted = taskKey === highlightedTaskKey;
+                    return (
+                      <button
+                        aria-label={`${task.title} 상세 열기`}
+                        className={`task-pill ${isHighlighted ? 'notification-highlight' : ''}`}
+                        key={taskKey}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onOpenTask(task);
+                        }}
+                        type="button"
+                      >
+                        {task.time ? `${task.time} ` : ''}
+                        {task.title}
+                      </button>
+                    );
+                  })}
                   {overflowCount > 0 ? <span className="more-pill">+{overflowCount} more</span> : null}
                 </div>
               </div>
@@ -818,14 +984,18 @@ function CalendarPanel({
           <p className="calendar-empty">선택한 날짜에 등록된 할 일이 없습니다.</p>
         ) : (
           <ul className="selected-task-list">
-            {selectedTasks.map((task) => (
-              <li key={`${task.id}:${task.occurrenceDate}`}>
-                <button onClick={() => onOpenTask(task)} type="button">
-                  {task.time ? `${task.time} ` : ''}
-                  {task.title}
-                </button>
-              </li>
-            ))}
+            {selectedTasks.map((task) => {
+              const taskKey = `${task.id}:${task.occurrenceDate}`;
+              const isHighlighted = taskKey === highlightedTaskKey;
+              return (
+                <li className={isHighlighted ? 'notification-highlight' : ''} key={taskKey}>
+                  <button data-testid={isHighlighted ? 'notification-highlighted-task' : undefined} onClick={() => onOpenTask(task)} type="button">
+                    {task.time ? `${task.time} ` : ''}
+                    {task.title}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

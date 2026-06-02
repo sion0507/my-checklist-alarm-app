@@ -84,7 +84,7 @@ export function buildSevenDayNotificationSchedule({
           taskId: occurrence.id,
           occurrenceDate: occurrence.occurrenceDate,
           title: occurrence.title,
-          path: `/?date=${occurrence.date}`,
+          path: `/?date=${occurrence.date}&taskId=${encodeURIComponent(occurrence.id)}&occurrenceDate=${encodeURIComponent(occurrence.occurrenceDate)}&entry=notification`,
         },
       });
     }

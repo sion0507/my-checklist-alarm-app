@@ -40,7 +40,12 @@ describe('seven-day notification schedule planner', () => {
         jobId: 'task:inside:2026-06-03',
         kind: 'task',
         scheduledFor: '2026-06-03T09:30:00',
-        metadata: { taskId: 'inside', occurrenceDate: '2026-06-03', title: '알림 할 일', path: '/?date=2026-06-03' },
+        metadata: {
+          taskId: 'inside',
+          occurrenceDate: '2026-06-03',
+          title: '알림 할 일',
+          path: '/?date=2026-06-03&taskId=inside&occurrenceDate=2026-06-03&entry=notification',
+        },
       }),
     );
     expect(jobs.map((job) => job.jobId)).not.toContain('task:outside:2026-06-08');
