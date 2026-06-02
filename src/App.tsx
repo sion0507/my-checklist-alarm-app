@@ -157,6 +157,16 @@ function taskReviewKey(task: TaskOccurrence) {
   return `${task.id}:${task.occurrenceDate}`;
 }
 
+function minutesSinceStartOfDay(time: string) {
+  const [hour = '0', minute = '0'] = time.split(':');
+  return Number(hour) * 60 + Number(minute);
+}
+
+function isAfterReminderTime(currentDate: Date, reminderTime: string) {
+  const currentMinutes = currentDate.getHours() * 60 + currentDate.getMinutes();
+  return currentMinutes >= minutesSinceStartOfDay(reminderTime);
+}
+
 function getNotificationPermission(): NotificationPermissionView {
   return 'Notification' in window ? Notification.permission : 'unsupported';
 }
@@ -284,6 +294,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
   const todayDate = appToday;
   const showMorningCheckIn = morningCheckInState[todayDate] !== 'done';
+  const showEveningReview = isAfterReminderTime(initialCalendarDate, reminderSettings.eveningTime);
   const reviewedEveningTasks = eveningReviewState[todayDate] ?? [];
   const unfinishedEveningTasks = todayTasks.filter((task) => !task.completed);
   const eveningReviewTasks = unfinishedEveningTasks.filter((task) => !reviewedEveningTasks.includes(taskReviewKey(task)));
@@ -608,6 +619,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
               eveningMoveDates={eveningMoveDates}
               eveningReviewTasks={eveningReviewTasks}
               hasUnfinishedEveningTasks={unfinishedEveningTasks.length > 0}
+              showEveningReview={showEveningReview}
               onDeleteEveningTask={(task) => void handleDeleteEveningTask(task)}
               onDeleteTask={handleDeleteTask}
               onEditTask={openEditModal}
@@ -760,6 +772,7 @@ type TodayPanelProps = {
   eveningReviewTasks: TaskOccurrence[];
   eveningMoveDates: Record<string, string>;
   hasUnfinishedEveningTasks: boolean;
+  showEveningReview: boolean;
   onQuickTitleChange: (value: string) => void;
   onQuickAdd: (event: FormEvent<HTMLFormElement>) => void;
   onMorningQuickTitleChange: (value: string) => void;
@@ -782,6 +795,7 @@ function TodayPanel({
   eveningReviewTasks,
   eveningMoveDates,
   hasUnfinishedEveningTasks,
+  showEveningReview,
   onQuickTitleChange,
   onQuickAdd,
   onMorningQuickTitleChange,
@@ -835,15 +849,17 @@ function TodayPanel({
         </section>
       ) : null}
 
-      <EveningReviewCard
-        hasUnfinishedTasks={hasUnfinishedEveningTasks}
-        moveDates={eveningMoveDates}
-        onDeleteTask={onDeleteEveningTask}
-        onLeaveTask={onLeaveEveningTask}
-        onMoveDateChange={onEveningMoveDateChange}
-        onMoveTask={onMoveEveningTask}
-        tasks={eveningReviewTasks}
-      />
+      {showEveningReview ? (
+        <EveningReviewCard
+          hasUnfinishedTasks={hasUnfinishedEveningTasks}
+          moveDates={eveningMoveDates}
+          onDeleteTask={onDeleteEveningTask}
+          onLeaveTask={onLeaveEveningTask}
+          onMoveDateChange={onEveningMoveDateChange}
+          onMoveTask={onMoveEveningTask}
+          tasks={eveningReviewTasks}
+        />
+      ) : null}
 
       <form className="quick-add" onSubmit={onQuickAdd}>
         <label htmlFor="quick-add-title">오늘 할 일 빠른 추가</label>
