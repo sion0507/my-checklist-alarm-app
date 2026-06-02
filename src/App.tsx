@@ -69,6 +69,7 @@ const recurrenceLabels: Record<Recurrence, string> = {
 const reminderSettingsKey = 'checklist-alarm:reminder-settings';
 const pushSubscriptionEndpointKey = 'checklist-alarm:push-subscription-endpoint';
 const morningCheckInStateKey = 'checklist-alarm:morning-check-in-state';
+const eveningReviewStateKey = 'checklist-alarm:evening-review-state';
 
 const defaultReminderSettings: ReminderSettings = {
   morningTime: '08:00',
@@ -93,6 +94,7 @@ type NotificationActionStatus = {
 };
 
 type MorningCheckInState = Record<string, 'done'>;
+type EveningReviewState = Record<string, string[]>;
 
 const notificationPermissionLabels: Record<NotificationPermissionView, string> = {
   default: '권한 요청 필요',
@@ -136,6 +138,33 @@ function loadMorningCheckInState(): MorningCheckInState {
 
 function saveMorningCheckInState(state: MorningCheckInState) {
   localStorage.setItem(morningCheckInStateKey, JSON.stringify(state));
+}
+
+function loadEveningReviewState(): EveningReviewState {
+  try {
+    const stored = localStorage.getItem(eveningReviewStateKey);
+    return stored ? (JSON.parse(stored) as EveningReviewState) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveEveningReviewState(state: EveningReviewState) {
+  localStorage.setItem(eveningReviewStateKey, JSON.stringify(state));
+}
+
+function taskReviewKey(task: TaskOccurrence) {
+  return `${task.id}:${task.occurrenceDate}`;
+}
+
+function minutesSinceStartOfDay(time: string) {
+  const [hour = '0', minute = '0'] = time.split(':');
+  return Number(hour) * 60 + Number(minute);
+}
+
+function isAfterReminderTime(currentDate: Date, reminderTime: string) {
+  const currentMinutes = currentDate.getHours() * 60 + currentDate.getMinutes();
+  return currentMinutes >= minutesSinceStartOfDay(reminderTime);
 }
 
 function getNotificationPermission(): NotificationPermissionView {
@@ -201,6 +230,8 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [quickTitle, setQuickTitle] = useState('');
   const [morningQuickTitle, setMorningQuickTitle] = useState('');
   const [morningCheckInState, setMorningCheckInState] = useState(loadMorningCheckInState);
+  const [eveningReviewState, setEveningReviewState] = useState(loadEveningReviewState);
+  const [eveningMoveDates, setEveningMoveDates] = useState<Record<string, string>>({});
   const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
   const [calendarDate, setCalendarDate] = useState(() => {
     const initialDate = initialNotificationEntry?.date ? new Date(`${initialNotificationEntry.date}T00:00:00`) : initialCalendarDate;
@@ -263,6 +294,10 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
   const todayDate = appToday;
   const showMorningCheckIn = morningCheckInState[todayDate] !== 'done';
+  const showEveningReview = isAfterReminderTime(initialCalendarDate, reminderSettings.eveningTime);
+  const reviewedEveningTasks = eveningReviewState[todayDate] ?? [];
+  const unfinishedEveningTasks = todayTasks.filter((task) => !task.completed);
+  const eveningReviewTasks = unfinishedEveningTasks.filter((task) => !reviewedEveningTasks.includes(taskReviewKey(task)));
   const calendarMonth = useMemo(
     () => getCalendarMonthDays(calendarDate.getFullYear(), calendarDate.getMonth(), allTasks, getTodayDateString()),
     [allTasks, calendarDate],
@@ -376,6 +411,33 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       saveMorningCheckInState(next);
       return next;
     });
+  }
+
+  function markEveningTaskReviewed(task: TaskOccurrence) {
+    setEveningReviewState((current) => {
+      const reviewed = current[appToday] ?? [];
+      const next = { ...current, [appToday]: Array.from(new Set([...reviewed, taskReviewKey(task)])) };
+      saveEveningReviewState(next);
+      return next;
+    });
+  }
+
+  function handleEveningMoveDateChange(task: TaskOccurrence, date: string) {
+    setEveningMoveDates((current) => ({ ...current, [taskReviewKey(task)]: date }));
+  }
+
+  async function handleDeleteEveningTask(task: TaskOccurrence) {
+    await handleDeleteTask(task);
+  }
+
+  async function handleMoveEveningTask(task: TaskOccurrence) {
+    const moveDate = eveningMoveDates[taskReviewKey(task)] ?? task.date;
+    if (task.isRecurringOccurrence) {
+      await moveTaskOccurrence(task.id, task.occurrenceDate, moveDate);
+    } else {
+      await updateTask(task.id, { date: moveDate });
+    }
+    await refreshTasks();
   }
 
   function openEditModal(task: TaskOccurrence) {
@@ -554,11 +616,19 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           ) : null}
           {active.id === 'today' ? (
             <TodayPanel
+              eveningMoveDates={eveningMoveDates}
+              eveningReviewTasks={eveningReviewTasks}
+              hasUnfinishedEveningTasks={unfinishedEveningTasks.length > 0}
+              showEveningReview={showEveningReview}
+              onDeleteEveningTask={(task) => void handleDeleteEveningTask(task)}
               onDeleteTask={handleDeleteTask}
               onEditTask={openEditModal}
+              onEveningMoveDateChange={handleEveningMoveDateChange}
+              onLeaveEveningTask={markEveningTaskReviewed}
               onMorningCheckInComplete={completeMorningCheckIn}
               onMorningQuickAdd={handleMorningQuickAdd}
               onMorningQuickTitleChange={setMorningQuickTitle}
+              onMoveEveningTask={(task) => void handleMoveEveningTask(task)}
               onQuickAdd={handleQuickAdd}
               onQuickTitleChange={setQuickTitle}
               onToggleComplete={handleToggleComplete}
@@ -699,11 +769,19 @@ type TodayPanelProps = {
   quickTitle: string;
   morningQuickTitle: string;
   showMorningCheckIn: boolean;
+  eveningReviewTasks: TaskOccurrence[];
+  eveningMoveDates: Record<string, string>;
+  hasUnfinishedEveningTasks: boolean;
+  showEveningReview: boolean;
   onQuickTitleChange: (value: string) => void;
   onQuickAdd: (event: FormEvent<HTMLFormElement>) => void;
   onMorningQuickTitleChange: (value: string) => void;
   onMorningQuickAdd: (event: FormEvent<HTMLFormElement>) => void;
   onMorningCheckInComplete: () => void;
+  onEveningMoveDateChange: (task: TaskOccurrence, date: string) => void;
+  onLeaveEveningTask: (task: TaskOccurrence) => void;
+  onDeleteEveningTask: (task: TaskOccurrence) => void;
+  onMoveEveningTask: (task: TaskOccurrence) => void;
   onToggleComplete: (task: TaskOccurrence) => void;
   onEditTask: (task: TaskOccurrence) => void;
   onDeleteTask: (task: TaskOccurrence) => void;
@@ -714,11 +792,19 @@ function TodayPanel({
   quickTitle,
   morningQuickTitle,
   showMorningCheckIn,
+  eveningReviewTasks,
+  eveningMoveDates,
+  hasUnfinishedEveningTasks,
+  showEveningReview,
   onQuickTitleChange,
   onQuickAdd,
   onMorningQuickTitleChange,
   onMorningQuickAdd,
   onMorningCheckInComplete,
+  onEveningMoveDateChange,
+  onLeaveEveningTask,
+  onDeleteEveningTask,
+  onMoveEveningTask,
   onToggleComplete,
   onEditTask,
   onDeleteTask,
@@ -761,6 +847,18 @@ function TodayPanel({
             </div>
           </form>
         </section>
+      ) : null}
+
+      {showEveningReview ? (
+        <EveningReviewCard
+          hasUnfinishedTasks={hasUnfinishedEveningTasks}
+          moveDates={eveningMoveDates}
+          onDeleteTask={onDeleteEveningTask}
+          onLeaveTask={onLeaveEveningTask}
+          onMoveDateChange={onEveningMoveDateChange}
+          onMoveTask={onMoveEveningTask}
+          tasks={eveningReviewTasks}
+        />
       ) : null}
 
       <form className="quick-add" onSubmit={onQuickAdd}>
@@ -816,6 +914,78 @@ function TodayPanel({
         </ul>
       )}
     </div>
+  );
+}
+
+type EveningReviewCardProps = {
+  tasks: TaskOccurrence[];
+  moveDates: Record<string, string>;
+  hasUnfinishedTasks: boolean;
+  onLeaveTask: (task: TaskOccurrence) => void;
+  onDeleteTask: (task: TaskOccurrence) => void;
+  onMoveTask: (task: TaskOccurrence) => void;
+  onMoveDateChange: (task: TaskOccurrence, date: string) => void;
+};
+
+function EveningReviewCard({
+  tasks,
+  moveDates,
+  hasUnfinishedTasks,
+  onLeaveTask,
+  onDeleteTask,
+  onMoveTask,
+  onMoveDateChange,
+}: EveningReviewCardProps) {
+  const completionMessage = hasUnfinishedTasks
+    ? '오늘 저녁 리뷰가 완료되었습니다. 남긴 할 일은 그대로 유지됩니다.'
+    : '오늘 미완료 할 일이 없습니다. 편안한 저녁 보내세요.';
+
+  return (
+    <section className="evening-review-card" aria-label="저녁 미완료 리뷰">
+      <div className="evening-review-header">
+        <div>
+          <p className="evening-kicker">Evening</p>
+          <h2>저녁 리뷰</h2>
+        </div>
+      </div>
+      {tasks.length === 0 ? (
+        <p className="evening-empty">{completionMessage}</p>
+      ) : (
+        <ul className="evening-review-list" aria-label="저녁 리뷰 미완료 할 일">
+          {tasks.map((task) => {
+            const key = taskReviewKey(task);
+            return (
+              <li key={key}>
+                <div>
+                  <strong>{task.title}</strong>
+                  <span>{task.time ? `${task.time} · ` : ''}미완료</span>
+                </div>
+                <div className="evening-review-actions">
+                  <button type="button" onClick={() => onLeaveTask(task)}>
+                    {task.title} 그대로 두기
+                  </button>
+                  <button className="danger-button" type="button" onClick={() => onDeleteTask(task)}>
+                    {task.title} 삭제
+                  </button>
+                  <label>
+                    이동할 날짜
+                    <input
+                      aria-label={`${task.title} 이동할 날짜`}
+                      onChange={(event) => onMoveDateChange(task, event.target.value)}
+                      type="date"
+                      value={moveDates[key] ?? task.date}
+                    />
+                  </label>
+                  <button type="button" onClick={() => onMoveTask(task)}>
+                    {task.title} 이동
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 

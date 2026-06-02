@@ -17,13 +17,13 @@ describe('Today local task workflow', () => {
     await user.type(screen.getByLabelText('오늘 할 일 빠른 추가'), '병원 예약');
     await user.click(screen.getByRole('button', { name: '추가' }));
 
-    expect(await screen.findByText('병원 예약')).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: '병원 예약 완료' })).toBeInTheDocument();
     const [stored] = await listTasks();
     expect(stored).toMatchObject({ title: '병원 예약', completed: false });
 
     unmount();
     render(<App />);
-    expect(await screen.findByText('병원 예약')).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: '병원 예약 완료' })).toBeInTheDocument();
   });
 
   it('opens detail modal to edit all task fields', async () => {

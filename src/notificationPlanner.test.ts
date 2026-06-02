@@ -32,9 +32,10 @@ describe('seven-day notification schedule planner', () => {
     });
 
     expect(jobs.filter((job) => job.kind === 'morning')).toHaveLength(7);
-    expect(jobs.filter((job) => job.kind === 'evening')).toHaveLength(7);
+    expect(jobs.filter((job) => job.kind === 'evening')).toHaveLength(1);
     expect(jobs.map((job) => job.scheduledFor)).toContain('2026-06-01T08:00:00');
-    expect(jobs.map((job) => job.scheduledFor)).toContain('2026-06-07T23:00:00');
+    expect(jobs.map((job) => job.scheduledFor)).toContain('2026-06-03T23:00:00');
+    expect(jobs.map((job) => job.scheduledFor)).not.toContain('2026-06-07T23:00:00');
     expect(jobs).toContainEqual(
       expect.objectContaining({
         jobId: 'task:inside:2026-06-03',
@@ -50,6 +51,27 @@ describe('seven-day notification schedule planner', () => {
     );
     expect(jobs.map((job) => job.jobId)).not.toContain('task:outside:2026-06-08');
     expect(JSON.stringify(jobs)).not.toContain('local-only memo');
+  });
+
+  it('schedules evening review only for dates with unfinished tasks', () => {
+    const jobs = buildSevenDayNotificationSchedule({
+      tasks: [
+        task({ id: 'done', date: '2026-06-01', completed: true }),
+        task({ id: 'unfinished', date: '2026-06-02', completed: false, notify: false, time: '' }),
+      ],
+      settings,
+      startDate: '2026-06-01',
+    });
+
+    expect(jobs).not.toContainEqual(expect.objectContaining({ jobId: 'evening:2026-06-01' }));
+    expect(jobs).toContainEqual(
+      expect.objectContaining({
+        jobId: 'evening:2026-06-02',
+        kind: 'evening',
+        scheduledFor: '2026-06-02T23:00:00',
+        metadata: { title: '저녁 체크리스트 리뷰', path: '/?date=2026-06-02' },
+      }),
+    );
   });
 
   it('uses configurable morning reminder time with 08:00 as the documented default setting', () => {

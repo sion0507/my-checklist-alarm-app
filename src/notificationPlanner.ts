@@ -69,9 +69,12 @@ export function buildSevenDayNotificationSchedule({
   for (let offset = 0; offset < 7; offset += 1) {
     const date = addDays(startDate, offset);
     jobs.push(dailyJob('morning', date, settings.morningTime));
-    jobs.push(dailyJob('evening', date, settings.eveningTime));
+    const occurrences = projectTasksForDate(tasks, date);
+    if (occurrences.some((occurrence) => !occurrence.completed)) {
+      jobs.push(dailyJob('evening', date, settings.eveningTime));
+    }
 
-    for (const occurrence of projectTasksForDate(tasks, date)) {
+    for (const occurrence of occurrences) {
       if (!occurrence.notify || !occurrence.time || occurrence.completed) {
         continue;
       }
