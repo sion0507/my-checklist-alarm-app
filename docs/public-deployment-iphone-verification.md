@@ -136,6 +136,23 @@ Because scheduled delivery depends on provider cron/storage, record exact observ
 - The current checked-in API adapter needs durable storage and scheduler wiring before scheduled reminders can be considered production-ready.
 - Web Push cannot provide a custom alarm sound/song; it uses system/browser notification behavior.
 
+## Test-only Vercel deployment for Issue #13
+
+- Production URL: https://my-checklist-alarm-app.vercel.app
+- Hosting target: Vercel free-tier project `my-checklist-alarm-app`.
+- Production env configured in Vercel, not committed:
+  - `VAPID_PUBLIC_KEY`
+  - `VAPID_PRIVATE_KEY`
+  - `VAPID_SUBJECT=mailto:sionbang91@gmail.com`
+  - `PUSH_TEST_SENDER_ENABLED=true`
+- Automated smoke checks recorded by Hermes:
+  - `/` returned `200` over HTTPS.
+  - `/manifest.webmanifest` returned `200` and declares `display: "standalone"`.
+  - `/service-worker.js` returned `200` and contains `push`/`notificationclick` handlers.
+  - `/api/push/vapid-public-key` returned `200` with a non-empty public key.
+- Scope: this is a **test-only** deployment for Home Screen PWA and immediate Web Push verification. Scheduled reminder delivery remains unverified until durable storage and scheduler work is implemented.
+- Follow-up issue for durable production scheduling: #27.
+
 ## HITL status for this branch
 
-Automated build/test and documentation can be completed by Builder. Public deployment and iPhone lock-screen/system push verification require user-provided hosting credentials/target, production secrets, durable storage/scheduler choice, and physical iPhone access.
+Automated build/test, public HTTPS deployment, Vercel env setup, and public smoke checks are complete. Real iPhone Home Screen installation, notification permission, subscription, and immediate test push verification still require the user's physical iPhone. Morning, time-specific, and evening scheduled push delivery must remain marked unverified for this test-only deployment until #27 is implemented.
