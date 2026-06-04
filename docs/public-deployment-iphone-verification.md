@@ -53,7 +53,7 @@ Provide these before attempting real public deployment:
 5. Durable storage env vars for Vercel KV / Upstash Redis REST:
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN`, or
    - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
-6. Required `CRON_SECRET` for `/api/push/cron`; invoke manual checks with `Authorization: Bearer $CRON_SECRET` or `?secret=$CRON_SECRET`. Do not rely on `x-vercel-cron` alone.
+6. Required `CRON_SECRET` for `/api/push/cron`; invoke manual checks with `Authorization: Bearer <CRON_SECRET>` or `?secret=<CRON_SECRET>`. Do not rely on `x-vercel-cron` alone.
 7. Real iPhone on iOS 16.4+ for manual Home Screen PWA verification.
 
 Use `.env.example` as the non-secret template. Never commit real secret values.
