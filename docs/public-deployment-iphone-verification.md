@@ -26,7 +26,7 @@ The checked-in Vercel adapter now supports a production-oriented durable path fo
 - Configure Vercel KV or Upstash Redis REST using `KV_REST_API_URL` + `KV_REST_API_TOKEN` or `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.
 - Push subscriptions are stored under minimal durable records: endpoint, expiration time, keys, and notification metadata only.
 - `/api/push/schedule` stores derived morning, time-specific task, and evening review jobs durably without full local task data.
-- `vercel.json` registers `/api/push/cron` every 15 minutes; the cron route reads due scheduled jobs, sends Web Push, and records attempt count, success/failure state, status, error, and timestamps.
+- `vercel.json` registers `/api/push/cron` every 15 minutes; the cron route requires `CRON_SECRET` auth, reads due scheduled jobs, sends Web Push, and records attempt count, success/failure state, status, error, and timestamps.
 - `/api/push/status?endpoint=...` exposes recent job records for smoke/debug inspection without exposing full local task records.
 
 If Redis/KV env vars are absent, the adapter falls back to in-memory storage for local/test-only smoke checks and returns `durable: false`. Do not claim production scheduled delivery in that fallback mode. Real iPhone delivery still requires HITL verification on the deployed public HTTPS app.
@@ -53,7 +53,7 @@ Provide these before attempting real public deployment:
 5. Durable storage env vars for Vercel KV / Upstash Redis REST:
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN`, or
    - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
-6. Optional `CRON_SECRET` if manually invoking `/api/push/cron` outside Vercel Cron.
+6. Required `CRON_SECRET` for `/api/push/cron`; invoke manual checks with `Authorization: Bearer $CRON_SECRET` or `?secret=$CRON_SECRET`. Do not rely on `x-vercel-cron` alone.
 7. Real iPhone on iOS 16.4+ for manual Home Screen PWA verification.
 
 Use `.env.example` as the non-secret template. Never commit real secret values.
@@ -69,7 +69,7 @@ Use `.env.example` as the non-secret template. Never commit real secret values.
 - [ ] Public HTTPS URL is known.
 - [ ] `/api/push/vapid-public-key` returns the configured public VAPID key over HTTPS.
 - [ ] Durable subscription/schedule storage is configured (`/api/push/schedule` returns `durable: true`).
-- [ ] Scheduler/cron worker is configured (`vercel.json` includes `/api/push/cron`; provider cron logs show invocations).
+- [ ] Scheduler/cron worker is configured (`vercel.json` includes `/api/push/cron`; `CRON_SECRET` is configured; provider cron logs show authorized invocations).
 
 ## Public HTTPS smoke checklist
 

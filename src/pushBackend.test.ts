@@ -277,9 +277,58 @@ describe('push backend API behavior', () => {
     await expect(backend.sendDueScheduledNotifications()).resolves.toMatchObject({ attempted: 1, sent: 1 });
   });
 
-  it('exposes due scheduled delivery through the HTTP cron route', async () => {
+  it('blocks production cron delivery when no secret is configured', async () => {
     const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
-    const api = createPushHttpApi({ vapidPublicKey: 'public-key', sendPush, now: () => new Date('2026-06-01T08:05:00.000Z') });
+    const api = createPushHttpApi({ vapidPublicKey: 'public-key', sendPush });
+
+    await expect(
+      api.handle(
+        new Request('https://app.example/api/push/cron', {
+          method: 'POST',
+        }),
+      ),
+    ).resolves.toEqual({ status: 401, body: { error: 'Cron request is not authorized' } });
+    expect(sendPush).not.toHaveBeenCalled();
+  });
+
+  it('blocks production cron delivery for an incorrect secret', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const api = createPushHttpApi({ vapidPublicKey: 'public-key', sendPush, cronSecret: 'correct-secret' });
+
+    await expect(
+      api.handle(
+        new Request('https://app.example/api/push/cron', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer wrong-secret' },
+        }),
+      ),
+    ).resolves.toEqual({ status: 401, body: { error: 'Cron request is not authorized' } });
+    expect(sendPush).not.toHaveBeenCalled();
+  });
+
+  it('does not trust the Vercel cron header without the configured secret', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const api = createPushHttpApi({ vapidPublicKey: 'public-key', sendPush, cronSecret: 'correct-secret' });
+
+    await expect(
+      api.handle(
+        new Request('https://app.example/api/push/cron', {
+          method: 'POST',
+          headers: { 'x-vercel-cron': '1' },
+        }),
+      ),
+    ).resolves.toEqual({ status: 401, body: { error: 'Cron request is not authorized' } });
+    expect(sendPush).not.toHaveBeenCalled();
+  });
+
+  it('exposes due scheduled delivery through the HTTP cron route with the configured secret', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const api = createPushHttpApi({
+      vapidPublicKey: 'public-key',
+      sendPush,
+      now: () => new Date('2026-06-01T08:05:00.000Z'),
+      cronSecret: 'correct-secret',
+    });
     await api.backend.upsertSubscription({ subscription: subscription() });
     await api.backend.replaceScheduledJobs({
       endpoint: 'https://push.example/device-1',
@@ -297,7 +346,7 @@ describe('push backend API behavior', () => {
       api.handle(
         new Request('https://app.example/api/push/cron', {
           method: 'POST',
-          headers: { 'x-vercel-cron': '1' },
+          headers: { Authorization: 'Bearer correct-secret', 'x-vercel-cron': '1' },
         }),
       ),
     ).resolves.toEqual({ status: 200, body: { ok: true, attempted: 1, sent: 1, failed: 0, remainingDue: 0 } });

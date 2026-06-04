@@ -5,6 +5,7 @@ const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
 const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
 const pushSenderEnabled = process.env.PUSH_TEST_SENDER_ENABLED === 'true' || process.env.PUSH_SENDER_ENABLED === 'true';
 const cronSecret = process.env.CRON_SECRET || '';
+const allowUnauthenticatedCron = process.env.ALLOW_UNAUTHENTICATED_CRON === 'true' && process.env.NODE_ENV !== 'production';
 const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
 const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
 
@@ -409,11 +410,11 @@ async function listScheduledJobs(endpoint) {
 }
 
 function isAuthorizedCronRequest(req) {
-  if (req.headers['x-vercel-cron']) {
+  if (allowUnauthenticatedCron) {
     return true;
   }
   if (!cronSecret) {
-    return true;
+    return false;
   }
   return req.headers.authorization === `Bearer ${cronSecret}` || req.query?.secret === cronSecret;
 }
