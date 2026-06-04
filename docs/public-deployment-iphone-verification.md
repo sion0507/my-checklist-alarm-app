@@ -37,7 +37,7 @@ If Redis/KV env vars are absent, the adapter falls back to in-memory storage for
 A practical first target is Vercel because the repo already contains a Vercel-style `api/push/[action].js` route and Vite static build output. Other providers are possible, but will need adapter work:
 
 - Vercel: frontend + serverless API can fit the current file layout. Configure Vercel KV or Upstash Redis REST for durable scheduled reminder state. On Hobby, do not configure a 15-minute Vercel Cron because Hobby accounts are limited to daily cron jobs.
-- External scheduler: use cron-job.org or an equivalent service to call `/api/push/cron` every 15 minutes with the `Authorization: Bearer <CRON_SECRET>` header.
+- External scheduler: use cron-job.org or an equivalent service to call `/api/push/cron` every 15 minutes with an Authorization bearer header.
 - Netlify: would need Netlify Functions route adaptation or redirects.
 - Cloudflare Pages/Workers: would need Worker-style API/storage adaptation, but can use KV/D1/Cron Triggers.
 
