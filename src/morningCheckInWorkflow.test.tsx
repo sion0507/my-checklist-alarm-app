@@ -9,6 +9,7 @@ describe('Morning check-in workflow', () => {
   beforeEach(async () => {
     await clearTaskStoreForTests();
     localStorage.clear();
+    window.history.replaceState({}, '', '/');
   });
 
   afterEach(() => {
@@ -53,5 +54,19 @@ describe('Morning check-in workflow', () => {
     await waitFor(async () => {
       expect(await listTasks()).toEqual([expect.objectContaining({ title: '물 마시기', date: '2026-06-01' })]);
     });
+  });
+
+  it('shows the morning notification task list even after daily check-in was completed', async () => {
+    await createTask({ title: '알림으로 확인할 일', date: '2026-06-01', time: '09:00', recurrence: 'none', memo: '', notify: true });
+    localStorage.setItem('checklist-alarm:morning-check-in-state', JSON.stringify({ '2026-06-01': 'done' }));
+    window.history.pushState({}, '', '/?date=2026-06-01&entry=morning');
+
+    render(<App initialCalendarDate={new Date('2026-06-01T10:00:00')} />);
+
+    const card = await screen.findByRole('region', { name: '아침 체크인 카드' });
+    expect(within(card).getByRole('heading', { name: '아침 체크인' })).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: '알림으로 확인할 일 완료' })).toBeInTheDocument();
+    expect(await within(card).findByText(/오늘 할 일\s*1\s*개를 확인해 보세요\./)).toBeInTheDocument();
+    expect(within(card).getByRole('list', { name: '아침 체크인 오늘 할 일 요약' })).toHaveTextContent('알림으로 확인할 일');
   });
 });

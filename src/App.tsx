@@ -89,6 +89,11 @@ type NotificationEntryState = {
   occurrenceDate: string;
 };
 
+type DailyNotificationEntryState = {
+  kind: 'morning' | 'evening';
+  date: string;
+};
+
 type NotificationActionStatus = {
   message: string;
 };
@@ -192,6 +197,16 @@ function loadNotificationEntry(): NotificationEntryState | null {
   return { taskId, date, occurrenceDate };
 }
 
+function loadDailyNotificationEntry(): DailyNotificationEntryState | null {
+  const params = new URLSearchParams(window.location.search);
+  const entry = params.get('entry');
+  const date = params.get('date');
+  if ((entry !== 'morning' && entry !== 'evening') || !date) {
+    return null;
+  }
+  return { kind: entry, date };
+}
+
 function notificationTaskKey(entry: NotificationEntryState | null) {
   return entry ? `${entry.taskId}:${entry.occurrenceDate}` : '';
 }
@@ -222,6 +237,7 @@ type AppProps = {
 
 export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const initialNotificationEntry = loadNotificationEntry();
+  const initialDailyNotificationEntry = loadDailyNotificationEntry();
   const [notificationEntry, setNotificationEntry] = useState<NotificationEntryState | null>(initialNotificationEntry);
   const [notificationActionStatus, setNotificationActionStatus] = useState<NotificationActionStatus | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>(initialNotificationEntry ? 'calendar' : 'today');
@@ -293,8 +309,8 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
   const todayDate = appToday;
-  const showMorningCheckIn = morningCheckInState[todayDate] !== 'done';
-  const showEveningReview = isAfterReminderTime(initialCalendarDate, reminderSettings.eveningTime);
+  const showMorningCheckIn = morningCheckInState[todayDate] !== 'done' || initialDailyNotificationEntry?.kind === 'morning';
+  const showEveningReview = isAfterReminderTime(initialCalendarDate, reminderSettings.eveningTime) || initialDailyNotificationEntry?.kind === 'evening';
   const reviewedEveningTasks = eveningReviewState[todayDate] ?? [];
   const unfinishedEveningTasks = todayTasks.filter((task) => !task.completed);
   const eveningReviewTasks = unfinishedEveningTasks.filter((task) => !reviewedEveningTasks.includes(taskReviewKey(task)));
