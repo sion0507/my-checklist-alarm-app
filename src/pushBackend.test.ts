@@ -254,6 +254,74 @@ describe('push backend API behavior', () => {
     );
   });
 
+  it('does not send scheduled jobs before their due time', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const backend = createPushBackend({
+      vapidPublicKey: 'public-key',
+      sendPush,
+      now: () => new Date('2026-06-01T07:55:00.000Z'),
+    });
+    await backend.upsertSubscription({ subscription: subscription() });
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T08:00:00',
+          metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+        },
+      ],
+    });
+
+    await expect(backend.sendDueScheduledNotifications()).resolves.toEqual({
+      ok: true,
+      attempted: 0,
+      sent: 0,
+      failed: 0,
+      remainingDue: 0,
+    });
+    expect(sendPush).not.toHaveBeenCalled();
+    expect(backend.listScheduledJobs('https://push.example/device-1')).toContainEqual(
+      expect.objectContaining({ jobId: 'morning:2026-06-01', state: 'scheduled', attempts: 0 }),
+    );
+  });
+
+  it('does not send completed scheduled jobs again on later cron runs', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const backend = createPushBackend({
+      vapidPublicKey: 'public-key',
+      sendPush,
+      now: () => new Date('2026-06-01T08:05:00.000Z'),
+    });
+    await backend.upsertSubscription({ subscription: subscription() });
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T08:00:00',
+          metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+        },
+      ],
+    });
+
+    await expect(backend.sendDueScheduledNotifications()).resolves.toMatchObject({ attempted: 1, sent: 1 });
+    await expect(backend.sendDueScheduledNotifications()).resolves.toEqual({
+      ok: true,
+      attempted: 0,
+      sent: 0,
+      failed: 0,
+      remainingDue: 0,
+    });
+
+    expect(sendPush).toHaveBeenCalledTimes(1);
+    expect(backend.listScheduledJobs('https://push.example/device-1')).toContainEqual(
+      expect.objectContaining({ jobId: 'morning:2026-06-01', state: 'completed', attempts: 1 }),
+    );
+  });
+
   it('uses subscription timezone metadata when deciding whether local scheduled jobs are due', async () => {
     const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
     const backend = createPushBackend({
