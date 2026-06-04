@@ -3,6 +3,7 @@ import { createPushBackend, type PushPayload, type StoredPushSubscription } from
 type PushHttpApiOptions = {
   vapidPublicKey: string;
   sendPush?: (subscription: StoredPushSubscription, payload: PushPayload) => Promise<{ ok: boolean; status?: number }>;
+  now?: () => Date;
 };
 
 type JsonResponse = {
@@ -58,6 +59,11 @@ export function createPushHttpApi(options: PushHttpApiOptions) {
             return json(400, { error: 'Push subscription endpoint and jobs are required' });
           }
           const result = await backend.replaceScheduledJobs(body as Parameters<typeof backend.replaceScheduledJobs>[0]);
+          return json(200, result);
+        }
+
+        if ((request.method === 'POST' || request.method === 'GET') && action === 'cron') {
+          const result = await backend.sendDueScheduledNotifications();
           return json(200, result);
         }
 

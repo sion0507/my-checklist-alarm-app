@@ -12,28 +12,30 @@ Issue #13 is HITL because a public HTTPS hosting account, production secrets, an
   - `public/manifest.webmanifest` declares standalone display, app identity, theme/background color, and a maskable icon.
   - `public/service-worker.js` caches shell assets, handles `push`, calls `showNotification()`, and routes notification clicks to the payload `path`.
 - Push API route:
-  - `api/push/[action].ts` mounts the push HTTP API for serverless-style deployments.
-  - Supported routes are `/api/push/vapid-public-key`, `/api/push/subscriptions`, `/api/push/test`, and `/api/push/schedule`.
+  - `api/push/[action].js` mounts the push HTTP API for Vercel-style serverless deployments.
+  - Supported routes are `/api/push/vapid-public-key`, `/api/push/subscriptions`, `/api/push/test`, `/api/push/schedule`, `/api/push/cron`, and `/api/push/status`.
 - Backend implementation:
-  - `src/pushHttpApi.ts` parses API requests and delegates to the push backend.
-  - `src/pushBackend.ts` stores only push subscription endpoint/keys plus minimal metadata and scheduled job records.
-  - `api/push/[action].ts` configures `web-push` from environment variables and sends the immediate test push when enabled.
+  - `src/pushHttpApi.ts` parses API requests and delegates to the push backend used by automated tests.
+  - `src/pushBackend.ts` stores only push subscription endpoint/keys plus minimal metadata and scheduled job records, and can send due scheduled jobs through an injected sender.
+  - `api/push/[action].js` configures `web-push` from environment variables and uses Vercel KV / Upstash Redis REST when configured.
 
-## Important production limitation
+## Production storage and scheduler path
 
-The checked-in `api/push/[action].ts` serverless adapter currently creates an in-memory push backend instance. That is fine for tests and local/serverless smoke checks, but it is **not durable enough for production scheduled reminders**:
+The checked-in Vercel adapter now supports a production-oriented durable path for scheduled reminders:
 
-- Serverless instances can restart or scale, losing in-memory subscriptions and scheduled jobs.
-- A free-tier deployment still needs durable storage for subscriptions and derived schedule records.
-- A free-tier deployment still needs a scheduler/cron worker that reads due jobs and sends Web Push at/near the scheduled times.
+- Configure Vercel KV or Upstash Redis REST using `KV_REST_API_URL` + `KV_REST_API_TOKEN` or `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.
+- Push subscriptions are stored under minimal durable records: endpoint, expiration time, keys, and notification metadata only.
+- `/api/push/schedule` stores derived morning, time-specific task, and evening review jobs durably without full local task data.
+- `vercel.json` registers `/api/push/cron` every 15 minutes; the cron route reads due scheduled jobs, sends Web Push, and records attempt count, success/failure state, status, error, and timestamps.
+- `/api/push/status?endpoint=...` exposes recent job records for smoke/debug inspection without exposing full local task records.
 
-Do not claim morning, time-specific, or evening scheduled push delivery is verified until durable storage, a scheduler, and real iPhone delivery have been exercised on the chosen provider.
+If Redis/KV env vars are absent, the adapter falls back to in-memory storage for local/test-only smoke checks and returns `durable: false`. Do not claim production scheduled delivery in that fallback mode. Real iPhone delivery still requires HITL verification on the deployed public HTTPS app.
 
 ## Recommended free-tier deployment target
 
-A practical first target is Vercel because the repo already contains a Vercel-style `api/push/[action].ts` route and Vite static build output. Other providers are possible, but will need adapter work:
+A practical first target is Vercel because the repo already contains a Vercel-style `api/push/[action].js` route and Vite static build output. Other providers are possible, but will need adapter work:
 
-- Vercel: frontend + serverless API can fit the current file layout. Needs external durable storage and cron/scheduler wiring for scheduled reminders.
+- Vercel: frontend + serverless API can fit the current file layout. Configure Vercel KV or Upstash Redis REST plus the checked-in Vercel Cron route for durable scheduled reminders.
 - Netlify: would need Netlify Functions route adaptation or redirects.
 - Cloudflare Pages/Workers: would need Worker-style API/storage adaptation, but can use KV/D1/Cron Triggers.
 
@@ -47,9 +49,11 @@ Provide these before attempting real public deployment:
    - `VAPID_PUBLIC_KEY`
    - `VAPID_PRIVATE_KEY`
    - `VAPID_SUBJECT` such as `mailto:you@example.com` or an HTTPS contact URL.
-4. `PUSH_TEST_SENDER_ENABLED=true` once the sender should send real pushes.
-5. Durable storage choice/binding for subscription and schedule records.
-6. Scheduler/cron choice for due scheduled jobs.
+4. `PUSH_SENDER_ENABLED=true` (or the existing `PUSH_TEST_SENDER_ENABLED=true`) once the sender should send real pushes.
+5. Durable storage env vars for Vercel KV / Upstash Redis REST:
+   - `KV_REST_API_URL` and `KV_REST_API_TOKEN`, or
+   - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+6. Optional `CRON_SECRET` if manually invoking `/api/push/cron` outside Vercel Cron.
 7. Real iPhone on iOS 16.4+ for manual Home Screen PWA verification.
 
 Use `.env.example` as the non-secret template. Never commit real secret values.
@@ -64,8 +68,8 @@ Use `.env.example` as the non-secret template. Never commit real secret values.
 - [ ] Production environment variables are configured in the hosting provider, not committed.
 - [ ] Public HTTPS URL is known.
 - [ ] `/api/push/vapid-public-key` returns the configured public VAPID key over HTTPS.
-- [ ] Durable subscription/schedule storage is configured or the limitation is explicitly accepted for a short test-only deployment.
-- [ ] Scheduler/cron worker is configured or scheduled reminder delivery is explicitly marked unverified.
+- [ ] Durable subscription/schedule storage is configured (`/api/push/schedule` returns `durable: true`).
+- [ ] Scheduler/cron worker is configured (`vercel.json` includes `/api/push/cron`; provider cron logs show invocations).
 
 ## Public HTTPS smoke checklist
 
@@ -133,7 +137,7 @@ Because scheduled delivery depends on provider cron/storage, record exact observ
 - iOS Web Push works only for Home Screen-installed web apps on iOS/iPadOS 16.4+.
 - Safari tab usage alone is not sufficient for iPhone Home Screen PWA Web Push.
 - Device Focus, notification settings, lock screen settings, network state, and battery policy can suppress or delay notifications.
-- The current checked-in API adapter needs durable storage and scheduler wiring before scheduled reminders can be considered production-ready.
+- If KV/Redis env vars are missing, the API adapter falls back to non-durable in-memory storage and scheduled reminders must be treated as test-only/unverified.
 - Web Push cannot provide a custom alarm sound/song; it uses system/browser notification behavior.
 
 ## Test-only Vercel deployment for Issue #13

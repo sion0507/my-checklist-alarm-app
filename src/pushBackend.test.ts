@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPushBackend, createPushPayload, type StoredPushSubscription } from './pushBackend';
+import { createInMemoryPushStore, createPushBackend, createPushPayload, type StoredPushSubscription } from './pushBackend';
 import { createPushHttpApi } from './pushHttpApi';
 
 function subscription(endpoint = 'https://push.example/device-1') {
@@ -173,5 +173,133 @@ describe('push backend API behavior', () => {
         }),
       ),
     ).resolves.toEqual({ status: 200, body: { ok: true, upserted: 1, cancelled: 0 } });
+  });
+
+  it('persists subscriptions and scheduled jobs through an injected durable store across backend instances', async () => {
+    const store = createInMemoryPushStore();
+    const firstBackend = createPushBackend({ vapidPublicKey: 'public-key', store, now: () => new Date('2026-06-01T00:00:00.000Z') });
+    await firstBackend.upsertSubscription({ subscription: subscription(), metadata: { timezone: 'Asia/Seoul' } });
+    await firstBackend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T08:00:00',
+          metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+        },
+      ],
+    });
+
+    const secondBackend = createPushBackend({ vapidPublicKey: 'public-key', store });
+
+    expect(secondBackend.getSubscription('https://push.example/device-1')).toMatchObject({
+      endpoint: 'https://push.example/device-1',
+      metadata: { timezone: 'Asia/Seoul' },
+    });
+    expect(secondBackend.listScheduledJobs('https://push.example/device-1')).toContainEqual(
+      expect.objectContaining({ jobId: 'morning:2026-06-01', state: 'scheduled' }),
+    );
+  });
+
+  it('sends due morning, task-time, and evening jobs while recording delivery attempts', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const backend = createPushBackend({
+      vapidPublicKey: 'public-key',
+      sendPush,
+      now: () => new Date('2026-06-01T23:05:00.000Z'),
+    });
+    await backend.upsertSubscription({ subscription: subscription() });
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T08:00:00',
+          metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+        },
+        {
+          jobId: 'task:task-1:2026-06-01',
+          kind: 'task',
+          scheduledFor: '2026-06-01T09:30:00',
+          metadata: { taskId: 'task-1', occurrenceDate: '2026-06-01', title: '할 일', path: '/?date=2026-06-01&taskId=task-1' },
+        },
+        {
+          jobId: 'evening:2026-06-01',
+          kind: 'evening',
+          scheduledFor: '2026-06-01T23:00:00',
+          metadata: { title: '저녁 리뷰', path: '/?date=2026-06-01' },
+        },
+        {
+          jobId: 'morning:2026-06-02',
+          kind: 'morning',
+          scheduledFor: '2026-06-02T08:00:00',
+          metadata: { title: '내일 아침 알림', path: '/?date=2026-06-02' },
+        },
+      ],
+    });
+
+    const result = await backend.sendDueScheduledNotifications({ limit: 10 });
+
+    expect(result).toEqual({ ok: true, attempted: 3, sent: 3, failed: 0, remainingDue: 0 });
+    expect(sendPush).toHaveBeenCalledTimes(3);
+    expect(sendPush.mock.calls.map(([, payload]) => payload)).toEqual([
+      { title: '아침 알림', body: '오늘 체크리스트를 확인해 주세요.', path: '/?date=2026-06-01' },
+      { title: '할 일', body: '예약된 할 일 시간입니다.', path: '/?date=2026-06-01&taskId=task-1' },
+      { title: '저녁 리뷰', body: '오늘 남은 할 일을 리뷰해 주세요.', path: '/?date=2026-06-01' },
+    ]);
+    expect(backend.listScheduledJobs('https://push.example/device-1')).toContainEqual(
+      expect.objectContaining({ jobId: 'evening:2026-06-01', state: 'completed', attempts: 1, lastStatus: 201 }),
+    );
+  });
+
+  it('uses subscription timezone metadata when deciding whether local scheduled jobs are due', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const backend = createPushBackend({
+      vapidPublicKey: 'public-key',
+      sendPush,
+      now: () => new Date('2026-05-31T23:05:00.000Z'),
+    });
+    await backend.upsertSubscription({ subscription: subscription(), metadata: { timezone: 'Asia/Seoul' } });
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T08:00:00',
+          metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+        },
+      ],
+    });
+
+    await expect(backend.sendDueScheduledNotifications()).resolves.toMatchObject({ attempted: 1, sent: 1 });
+  });
+
+  it('exposes due scheduled delivery through the HTTP cron route', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const api = createPushHttpApi({ vapidPublicKey: 'public-key', sendPush, now: () => new Date('2026-06-01T08:05:00.000Z') });
+    await api.backend.upsertSubscription({ subscription: subscription() });
+    await api.backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'morning:2026-06-01',
+          kind: 'morning',
+          scheduledFor: '2026-06-01T08:00:00',
+          metadata: { title: '아침 알림', path: '/?date=2026-06-01' },
+        },
+      ],
+    });
+
+    await expect(
+      api.handle(
+        new Request('https://app.example/api/push/cron', {
+          method: 'POST',
+          headers: { 'x-vercel-cron': '1' },
+        }),
+      ),
+    ).resolves.toEqual({ status: 200, body: { ok: true, attempted: 1, sent: 1, failed: 0, remainingDue: 0 } });
   });
 });
