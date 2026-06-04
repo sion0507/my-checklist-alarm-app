@@ -39,10 +39,16 @@ export type ScheduledNotificationRecord = {
     taskId?: string;
     occurrenceDate?: string;
   };
-  state: 'scheduled' | 'cancelled' | 'completed';
+  state: 'scheduled' | 'cancelled' | 'completed' | 'failed';
+  attempts: number;
   createdAt: string;
   updatedAt: string;
   cancelledAt?: string;
+  lastAttemptAt?: string;
+  completedAt?: string;
+  failedAt?: string;
+  lastStatus?: number;
+  lastError?: string;
 };
 
 type ScheduledNotificationInput = Pick<ScheduledNotificationRecord, 'jobId' | 'kind' | 'scheduledFor' | 'metadata'> & {
@@ -56,10 +62,16 @@ type SendPushResult = {
 
 type SendPush = (subscription: StoredPushSubscription, payload: PushPayload) => Promise<SendPushResult>;
 
+export type PushStore = {
+  subscriptions: Map<string, StoredPushSubscription>;
+  scheduledJobs: Map<string, ScheduledNotificationRecord>;
+};
+
 type PushBackendOptions = {
   vapidPublicKey: string;
   sendPush?: SendPush;
   now?: () => Date;
+  store?: PushStore;
 };
 
 type UpsertSubscriptionInput = {
@@ -77,6 +89,68 @@ function validateSubscription(subscription: MinimalPushSubscription) {
   }
 }
 
+function scheduledJobKey(endpoint: string, jobId: string) {
+  return `${endpoint}:${jobId}`;
+}
+
+function defaultBody(kind: ScheduledNotificationRecord['kind']) {
+  if (kind === 'morning') {
+    return '오늘 체크리스트를 확인해 주세요.';
+  }
+  if (kind === 'evening') {
+    return '오늘 남은 할 일을 리뷰해 주세요.';
+  }
+  return '예약된 할 일 시간입니다.';
+}
+
+function getTimeZoneOffsetMillis(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const asUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
+  );
+  return asUtc - date.getTime();
+}
+
+function scheduledForMillis(scheduledFor: string, timeZone?: string) {
+  if (!timeZone) {
+    return new Date(scheduledFor).getTime();
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(scheduledFor);
+  if (!match) {
+    return new Date(scheduledFor).getTime();
+  }
+  const [, year, month, day, hour, minute, second] = match;
+  const utcGuess = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  try {
+    const firstPass = utcGuess - getTimeZoneOffsetMillis(new Date(utcGuess), timeZone);
+    return utcGuess - getTimeZoneOffsetMillis(new Date(firstPass), timeZone);
+  } catch {
+    return new Date(scheduledFor).getTime();
+  }
+}
+
+export function createInMemoryPushStore(): PushStore {
+  return {
+    subscriptions: new Map<string, StoredPushSubscription>(),
+    scheduledJobs: new Map<string, ScheduledNotificationRecord>(),
+  };
+}
+
 export function createPushPayload(payload: PushPayload): PushPayload {
   return {
     title: payload.title,
@@ -85,9 +159,8 @@ export function createPushPayload(payload: PushPayload): PushPayload {
   };
 }
 
-export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Date() }: PushBackendOptions) {
-  const subscriptions = new Map<string, StoredPushSubscription>();
-  const scheduledJobs = new Map<string, ScheduledNotificationRecord>();
+export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Date(), store = createInMemoryPushStore() }: PushBackendOptions) {
+  const { subscriptions, scheduledJobs } = store;
 
   return {
     getVapidPublicKey() {
@@ -151,7 +224,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
 
       for (const record of scheduledJobs.values()) {
         if (record.endpoint === endpoint && record.state === 'scheduled' && !incomingIds.has(record.jobId)) {
-          scheduledJobs.set(`${endpoint}:${record.jobId}`, {
+          scheduledJobs.set(scheduledJobKey(endpoint, record.jobId), {
             ...record,
             state: 'cancelled',
             updatedAt: timestamp,
@@ -162,7 +235,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
       }
 
       for (const job of jobs) {
-        const key = `${endpoint}:${job.jobId}`;
+        const key = scheduledJobKey(endpoint, job.jobId);
         const previous = scheduledJobs.get(key);
         scheduledJobs.set(key, {
           endpoint,
@@ -176,8 +249,12 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
             occurrenceDate: job.metadata.occurrenceDate,
           },
           state: 'scheduled',
+          attempts: previous?.attempts ?? 0,
           createdAt: previous?.createdAt ?? timestamp,
           updatedAt: timestamp,
+          lastAttemptAt: previous?.lastAttemptAt,
+          lastStatus: previous?.lastStatus,
+          lastError: previous?.lastError,
         });
       }
 
@@ -191,6 +268,93 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
           const first = a.scheduledFor.localeCompare(b.scheduledFor);
           return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
         });
+    },
+
+    async sendDueScheduledNotifications({ limit = 25 }: { limit?: number } = {}) {
+      if (!sendPush) {
+        throw new Error('Web Push sender is not configured');
+      }
+
+      const timestamp = now().toISOString();
+      const currentTime = now().getTime();
+      const dueJobs = [...scheduledJobs.values()]
+        .filter((record) => {
+          if (record.state !== 'scheduled') {
+            return false;
+          }
+          const timezone = subscriptions.get(record.endpoint)?.metadata.timezone;
+          return scheduledForMillis(record.scheduledFor, timezone) <= currentTime;
+        })
+        .sort((a, b) => {
+          const first = a.scheduledFor.localeCompare(b.scheduledFor);
+          return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
+        });
+      const selectedJobs = dueJobs.slice(0, limit);
+      let sent = 0;
+      let failed = 0;
+
+      for (const record of selectedJobs) {
+        const key = scheduledJobKey(record.endpoint, record.jobId);
+        const subscription = subscriptions.get(record.endpoint);
+        if (!subscription) {
+          scheduledJobs.set(key, {
+            ...record,
+            state: 'failed',
+            attempts: record.attempts + 1,
+            updatedAt: timestamp,
+            lastAttemptAt: timestamp,
+            failedAt: timestamp,
+            lastError: 'Push subscription not found',
+          });
+          failed += 1;
+          continue;
+        }
+
+        try {
+          const result = await sendPush(
+            subscription,
+            createPushPayload({
+              title: record.metadata.title,
+              body: defaultBody(record.kind),
+              path: record.metadata.path,
+            }),
+          );
+          if (!result.ok) {
+            throw new Error(`Web Push sender returned status ${result.status ?? 'unknown'}`);
+          }
+          scheduledJobs.set(key, {
+            ...record,
+            state: 'completed',
+            attempts: record.attempts + 1,
+            updatedAt: timestamp,
+            lastAttemptAt: timestamp,
+            completedAt: timestamp,
+            lastStatus: result.status,
+            lastError: undefined,
+          });
+          sent += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Scheduled push delivery failed';
+          scheduledJobs.set(key, {
+            ...record,
+            state: 'failed',
+            attempts: record.attempts + 1,
+            updatedAt: timestamp,
+            lastAttemptAt: timestamp,
+            failedAt: timestamp,
+            lastError: message,
+          });
+          failed += 1;
+        }
+      }
+
+      return {
+        ok: true,
+        attempted: selectedJobs.length,
+        sent,
+        failed,
+        remainingDue: Math.max(dueJobs.length - selectedJobs.length, 0),
+      };
     },
   };
 }

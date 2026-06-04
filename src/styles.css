@@ -282,17 +282,12 @@ h1 {
   margin-top: 3px;
 }
 
-.evening-review-actions {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .evening-review-actions button,
 .evening-review-actions input {
   border-radius: 12px;
   font-weight: 800;
-  padding: 9px 10px;
+  font-size: 0.72rem;
+  padding: 8px 6px;
 }
 
 .evening-review-actions button {
@@ -386,17 +381,19 @@ h1 {
   margin: 0 !important;
 }
 
-.notification-entry-actions {
+.notification-entry-actions,
+.evening-review-actions {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .notification-entry-actions button,
 .notification-entry-actions input {
   border-radius: 12px;
+  font-size: 0.72rem;
   font-weight: 800;
-  padding: 10px 12px;
+  padding: 8px 6px;
 }
 
 .notification-entry-actions button {
