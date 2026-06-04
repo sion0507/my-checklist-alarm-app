@@ -26,7 +26,8 @@ The checked-in Vercel adapter now supports a production-oriented durable path fo
 - Configure Vercel KV or Upstash Redis REST using `KV_REST_API_URL` + `KV_REST_API_TOKEN` or `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.
 - Push subscriptions are stored under minimal durable records: endpoint, expiration time, keys, and notification metadata only.
 - `/api/push/schedule` stores derived morning, time-specific task, and evening review jobs durably without full local task data.
-- `vercel.json` registers `/api/push/cron` every 15 minutes; the cron route requires `CRON_SECRET` auth, reads due scheduled jobs, sends Web Push, and records attempt count, success/failure state, status, error, and timestamps.
+- `/api/push/cron` remains the scheduled worker endpoint; it requires `CRON_SECRET` auth, reads due scheduled jobs, sends Web Push, and records attempt count, success/failure state, status, error, and timestamps.
+- Vercel Hobby cannot deploy a `*/15 * * * *` Vercel Cron entry, so 15-minute scheduled delivery should be driven by an external scheduler such as cron-job.org calling `/api/push/cron`.
 - `/api/push/status?endpoint=...` exposes recent job records for smoke/debug inspection without exposing full local task records.
 
 If Redis/KV env vars are absent, the adapter falls back to in-memory storage for local/test-only smoke checks and returns `durable: false`. Do not claim production scheduled delivery in that fallback mode. Real iPhone delivery still requires HITL verification on the deployed public HTTPS app.
@@ -35,7 +36,8 @@ If Redis/KV env vars are absent, the adapter falls back to in-memory storage for
 
 A practical first target is Vercel because the repo already contains a Vercel-style `api/push/[action].js` route and Vite static build output. Other providers are possible, but will need adapter work:
 
-- Vercel: frontend + serverless API can fit the current file layout. Configure Vercel KV or Upstash Redis REST plus the checked-in Vercel Cron route for durable scheduled reminders.
+- Vercel: frontend + serverless API can fit the current file layout. Configure Vercel KV or Upstash Redis REST for durable scheduled reminder state. On Hobby, do not configure a 15-minute Vercel Cron because Hobby accounts are limited to daily cron jobs.
+- External scheduler: use cron-job.org or an equivalent service to call `/api/push/cron` every 15 minutes with the `Authorization: Bearer <CRON_SECRET>` header.
 - Netlify: would need Netlify Functions route adaptation or redirects.
 - Cloudflare Pages/Workers: would need Worker-style API/storage adaptation, but can use KV/D1/Cron Triggers.
 
@@ -58,6 +60,40 @@ Provide these before attempting real public deployment:
 
 Use `.env.example` as the non-secret template. Never commit real secret values.
 
+## External scheduler setup for Vercel Hobby
+
+Vercel Hobby preview/production deployments cannot use a 15-minute Vercel Cron entry such as `*/15 * * * *`; Hobby cron schedules are limited to daily jobs. Keep `vercel.json` free of the `crons` block for this app and run scheduled delivery through an external scheduler instead.
+
+Recommended free option: cron-job.org.
+
+1. Create a cron-job.org job for the deployed app.
+2. Set the schedule to every 15 minutes:
+
+   ```text
+   */15 * * * *
+   ```
+
+3. Set the request URL to the deployment cron endpoint:
+
+   ```text
+   https://<deployment-url>/api/push/cron
+   ```
+
+4. Configure the request method as `GET`.
+5. Configure the preferred authentication header:
+
+   ```text
+   Authorization: Bearer <CRON_SECRET>
+   ```
+
+6. Optional fallback for services that cannot set headers: include the secret as a query parameter instead. Prefer the header form when possible because it avoids putting the secret in URLs and logs.
+
+   ```text
+   https://<deployment-url>/api/push/cron?secret=<CRON_SECRET>
+   ```
+
+7. After deployment, verify cron-job.org execution history shows successful authorized runs and cross-check `/api/push/status?endpoint=...` for due job attempts.
+
 ## Pre-deployment checklist
 
 - [ ] `npm install` completed.
@@ -69,7 +105,7 @@ Use `.env.example` as the non-secret template. Never commit real secret values.
 - [ ] Public HTTPS URL is known.
 - [ ] `/api/push/vapid-public-key` returns the configured public VAPID key over HTTPS.
 - [ ] Durable subscription/schedule storage is configured (`/api/push/schedule` returns `durable: true`).
-- [ ] Scheduler/cron worker is configured (`vercel.json` includes `/api/push/cron`; `CRON_SECRET` is configured; provider cron logs show authorized invocations).
+- [ ] Scheduler is configured through an external service such as cron-job.org (`*/15 * * * *` calling `/api/push/cron` with `CRON_SECRET`; execution history shows authorized invocations).
 
 ## Public HTTPS smoke checklist
 
@@ -159,4 +195,4 @@ Because scheduled delivery depends on provider cron/storage, record exact observ
 
 ## HITL status for this branch
 
-Automated build/test, public HTTPS deployment, Vercel env setup, and public smoke checks are complete. Real iPhone Home Screen installation, notification permission, subscription, and immediate test push verification still require the user's physical iPhone. Morning, time-specific, and evening scheduled push delivery must remain marked unverified for this test-only deployment until #27 is implemented.
+Automated build/test checks for the #27 branch can verify durable storage code paths and cron endpoint authorization, but production HITL remains open until the deployed environment has `CRON_SECRET`, VAPID, KV/Redis REST credentials, sender enablement, cron-job.org execution history for `/api/push/cron`, and real iPhone Home Screen PWA receipt of morning, time-specific, and evening scheduled pushes.
