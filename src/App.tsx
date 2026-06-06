@@ -727,7 +727,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
         <section
           className="content-card"
           data-active-tab={active.id}
-          data-scroll-mode={active.id === 'settings' ? 'scroll' : 'fixed'}
+          data-scroll-mode={active.id === 'settings' ? 'scroll' : active.id === 'calendar' ? 'internal' : 'fixed'}
           id={`${active.id}-panel`}
           aria-label="활성 탭 화면"
         >
@@ -771,7 +771,6 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
               highlightedTaskKey={highlightedTaskKey}
               month={calendarMonth}
               onJumpMonth={jumpCalendarMonth}
-              onMonthChange={changeCalendarMonth}
               onOpenTask={handleAddSelectedTask}
               onSelectDate={handleSelectCalendarDate}
               onTouchEnd={handleCalendarTouchEnd}
@@ -1135,7 +1134,6 @@ type CalendarPanelProps = {
   month: CalendarMonth;
   selectedDate: string;
   highlightedTaskKey: string;
-  onMonthChange: (delta: number) => void;
   onJumpMonth: (year: number, monthIndex: number) => void;
   onSelectDate: (date: string, returnFocusTarget?: HTMLElement) => void;
   onOpenTask: (task: TaskOccurrence) => void;
@@ -1147,7 +1145,6 @@ function CalendarPanel({
   month,
   selectedDate,
   highlightedTaskKey,
-  onMonthChange,
   onJumpMonth,
   onSelectDate,
   onOpenTask,
@@ -1156,25 +1153,9 @@ function CalendarPanel({
 }: CalendarPanelProps) {
   const firstYear = Math.max(minimumCalendarYear, month.year - 3);
   const years = Array.from({ length: 7 }, (_, index) => firstYear + index);
-  const isAtMinimumMonth = month.year === minimumCalendarYear && month.monthIndex === 0;
 
   return (
     <div className="calendar-panel">
-      <div className="calendar-hero">
-        <div>
-          <p className="calendar-caption">Month view</p>
-          <h2>{month.title}</h2>
-        </div>
-        <div className="calendar-nav" aria-label="월 이동">
-          <button aria-label="이전 달" disabled={isAtMinimumMonth} onClick={() => onMonthChange(-1)} type="button">
-            ‹
-          </button>
-          <button aria-label="다음 달" onClick={() => onMonthChange(1)} type="button">
-            ›
-          </button>
-        </div>
-      </div>
-
       <div className="calendar-jump" aria-label="연월 바로 이동">
         <label>
           연도 선택
