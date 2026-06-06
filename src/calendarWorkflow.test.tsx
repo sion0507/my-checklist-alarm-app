@@ -21,7 +21,9 @@ describe('Calendar month view workflow', () => {
     render(<App initialCalendarDate={new Date(2026, 5, 1)} />);
     await user.click(screen.getByRole('tab', { name: /캘린더/ }));
 
-    expect(screen.getByRole('heading', { name: 'June 2026' })).toBeInTheDocument();
+    expect(screen.queryByText(/Month view/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('연도 선택')).toHaveValue('2026');
+    expect(screen.getByLabelText('월 선택')).toHaveValue('5');
     expect(screen.getByRole('columnheader', { name: 'Sun' })).toBeInTheDocument();
     expect(screen.getAllByTestId('calendar-day-cell')).toHaveLength(42);
 
@@ -72,9 +74,9 @@ describe('Calendar month view workflow', () => {
     render(<App initialCalendarDate={new Date(2026, 0, 1)} />);
     await user.click(screen.getByRole('tab', { name: /캘린더/ }));
 
-    expect(screen.getByRole('heading', { name: 'January 2026' })).toBeInTheDocument();
+    expect(screen.getByLabelText('연도 선택')).toHaveValue('2026');
     expect(screen.getByLabelText('연도 선택')).not.toHaveTextContent('2025');
-    expect(screen.getByRole('button', { name: '이전 달' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '이전 달' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /2025-12-31/ }));
     expect(screen.queryByRole('dialog', { name: '2025-12-31 일정' })).not.toBeInTheDocument();

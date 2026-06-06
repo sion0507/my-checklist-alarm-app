@@ -15,7 +15,7 @@ describe('PWA app shell', () => {
     expect(screen.getByRole('tab', { name: '설정' })).toBeInTheDocument();
   });
 
-  it('keeps only Settings marked as the scrollable tab surface', async () => {
+  it('marks Calendar for fixed-frame internal overflow and Settings for direct scrolling', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -25,7 +25,11 @@ describe('PWA app shell', () => {
     await user.click(screen.getByRole('tab', { name: '캘린더' }));
     expect(screen.queryByRole('heading', { name: '캘린더' })).not.toBeInTheDocument();
     expect(screen.queryByText('월간 일정과 할 일 분포를 확인할 공간입니다.')).not.toBeInTheDocument();
-    expect(contentCard).toHaveAttribute('data-scroll-mode', 'fixed');
+    expect(screen.queryByText(/Month view/i)).not.toBeInTheDocument();
+    expect(contentCard).toHaveAttribute('data-active-tab', 'calendar');
+    expect(contentCard).toHaveAttribute('data-scroll-mode', 'internal');
+    expect(screen.getByLabelText('연도 선택')).toBeInTheDocument();
+    expect(screen.getByLabelText('월 선택')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '캘린더' })).toHaveAttribute('aria-selected', 'true');
 
     await user.click(screen.getByRole('tab', { name: '설정' }));
