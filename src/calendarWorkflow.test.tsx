@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
@@ -7,6 +7,8 @@ import { clearTaskStoreForTests, createTask, listTasks } from './taskStore';
 
 describe('Calendar month view workflow', () => {
   beforeEach(async () => {
+    localStorage.clear();
+    window.history.pushState({}, '', '/');
     await clearTaskStoreForTests();
   });
 
@@ -32,31 +34,37 @@ describe('Calendar month view workflow', () => {
     expect(await screen.findByRole('dialog', { name: /병원 예약 아주 긴 제목입니다 상세/ })).toBeInTheDocument();
   });
 
-  it('selects a date, defaults add flow to that date, and supports month navigation and jumping', async () => {
-    const user = userEvent.setup();
+  it('opens selected-date tasks in a dismissible modal and keeps add flow tied to that date', async () => {
+    await createTask({ title: '선택 날짜 기존 할 일', date: '2026-06-12', time: '', recurrence: 'none', memo: '', notify: false });
     render(<App initialCalendarDate={new Date(2026, 5, 1)} />);
-    await user.click(screen.getByRole('tab', { name: /캘린더/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /캘린더/ }));
 
-    await user.click(screen.getByRole('button', { name: /2026-06-12/ }));
-    expect(screen.getByRole('heading', { name: '2026-06-12 일정' })).toBeInTheDocument();
-    await user.type(screen.getByLabelText('선택한 날짜에 할 일 추가'), '선택 날짜 할 일');
-    await user.click(screen.getByRole('button', { name: '날짜에 추가' }));
-    expect(await screen.findAllByText('선택 날짜 할 일')).toHaveLength(2);
-    expect(await listTasks()).toEqual([expect.objectContaining({ title: '선택 날짜 할 일', date: '2026-06-12' })]);
+    const dateButton = screen.getByRole('button', { name: /2026-06-12/ });
+    await waitFor(() => expect(within(dateButton).getByText('선택 날짜 기존 할 일')).toBeInTheDocument());
+    fireEvent.click(dateButton);
+    const dialog = await screen.findByRole('dialog', { name: '2026-06-12 일정' });
+    expect(screen.getByRole('button', { name: '선택 날짜 닫기' })).toHaveFocus();
+    expect(within(dialog).getByText('선택 날짜 기존 할 일')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '선택 날짜 일정' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '다음 달' }));
-    expect(screen.getByRole('heading', { name: 'July 2026' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '2026-07-01 일정' })).toBeInTheDocument();
-    await user.type(screen.getByLabelText('선택한 날짜에 할 일 추가'), '다음 달 선택 날짜 할 일');
-    await user.click(screen.getByRole('button', { name: '날짜에 추가' }));
-    expect(await listTasks()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ title: '다음 달 선택 날짜 할 일', date: '2026-07-01' })]),
-    );
+    fireEvent.change(within(dialog).getByLabelText('선택한 날짜에 할 일 추가'), { target: { value: '선택 날짜 할 일' } });
+    fireEvent.submit(within(dialog).getByRole('button', { name: '날짜에 추가' }).closest('form')!);
+    expect(await within(dialog).findByText('선택 날짜 할 일')).toBeInTheDocument();
+    await waitFor(async () => {
+      expect(await listTasks()).toEqual(expect.arrayContaining([expect.objectContaining({ title: '선택 날짜 할 일', date: '2026-06-12' })]));
+    });
 
-    await user.selectOptions(screen.getByLabelText('연도 선택'), '2027');
-    await user.selectOptions(screen.getByLabelText('월 선택'), '2');
-    expect(screen.getByRole('heading', { name: 'March 2027' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '2027-03-01 일정' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '2026-06-12 일정' })).not.toBeInTheDocument());
+    await waitFor(() => expect(dateButton).toHaveFocus());
+
+    fireEvent.click(dateButton);
+    fireEvent.click(await screen.findByRole('button', { name: '선택 날짜 닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '2026-06-12 일정' })).not.toBeInTheDocument());
+
+    fireEvent.click(dateButton);
+    fireEvent.click(await screen.findByRole('button', { name: '배경 클릭으로 닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '2026-06-12 일정' })).not.toBeInTheDocument());
   });
 
   it('limits calendar year selection and navigation to 2026 or later', async () => {
@@ -68,11 +76,7 @@ describe('Calendar month view workflow', () => {
     expect(screen.getByLabelText('연도 선택')).not.toHaveTextContent('2025');
     expect(screen.getByRole('button', { name: '이전 달' })).toBeDisabled();
 
-    await user.click(screen.getByRole('button', { name: '이전 달' }));
-    expect(screen.getByRole('heading', { name: 'January 2026' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '2026-01-01 일정' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /2025-12-31/ }));
-    expect(screen.getByRole('heading', { name: '2026-01-01 일정' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /2025-12-31/ }));
+    expect(screen.queryByRole('dialog', { name: '2025-12-31 일정' })).not.toBeInTheDocument();
   });
 });

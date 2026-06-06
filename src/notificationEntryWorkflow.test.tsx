@@ -30,13 +30,13 @@ describe('Notification task entry workflow', () => {
     render(<App initialCalendarDate={new Date('2026-06-01T12:00:00')} />);
 
     expect(await screen.findByRole('heading', { name: 'June 2026' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '2026-06-03 일정' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2026-06-03' })).toHaveClass('selected');
     const entry = screen.getByRole('region', { name: '알림에서 열린 할 일' });
     expect(await within(entry).findByText('09:30 약 먹기')).toBeInTheDocument();
     expect(within(entry).getByRole('button', { name: '약 먹기 완료' })).toBeInTheDocument();
     expect(within(entry).getByRole('button', { name: '약 먹기 삭제' })).toBeInTheDocument();
     expect(within(entry).getByLabelText('약 먹기 이동할 날짜')).toHaveValue('2026-06-03');
-    expect(screen.getByTestId('notification-highlighted-task')).toHaveTextContent('약 먹기');
+    expect(await screen.findByRole('button', { name: '약 먹기 상세 열기' })).toHaveClass('notification-highlight');
   });
 
   it('completes the notification task from quick actions', async () => {
@@ -81,7 +81,8 @@ describe('Notification task entry workflow', () => {
     await waitFor(async () => {
       expect(await listTasks()).toEqual([expect.objectContaining({ id: task.id, date: '2026-06-05' })]);
     });
-    expect(screen.getByRole('heading', { name: '2026-06-05 일정' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2026-06-05' })).toHaveClass('selected');
+    expect(await screen.findByRole('button', { name: '치과 예약 상세 열기' })).toHaveClass('notification-highlight');
     expect(screen.getByRole('status')).toHaveTextContent('치과 예약 2026-06-05로 이동했습니다.');
   });
 
