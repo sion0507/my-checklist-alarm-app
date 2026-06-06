@@ -71,6 +71,7 @@ const pushSubscriptionEndpointKey = 'checklist-alarm:push-subscription-endpoint'
 const morningCheckInStateKey = 'checklist-alarm:morning-check-in-state';
 const eveningReviewStateKey = 'checklist-alarm:evening-review-state';
 const themeColorKey = 'checklist-alarm:theme-color';
+const themeModeKey = 'checklist-alarm:theme-mode';
 const minimumCalendarYear = 2026;
 const minimumCalendarDateKey = `${minimumCalendarYear}-01-01`;
 
@@ -85,6 +86,7 @@ type ReminderSettings = {
 };
 
 type ThemeColor = 'blue' | 'green' | 'rose' | 'purple';
+type ThemeMode = 'light' | 'dark';
 
 const themeColorLabels: Record<ThemeColor, string> = {
   blue: '파랑',
@@ -93,7 +95,13 @@ const themeColorLabels: Record<ThemeColor, string> = {
   purple: '보라',
 };
 
+const themeModeLabels: Record<ThemeMode, string> = {
+  light: 'Light',
+  dark: 'Dark',
+};
+
 const themeColorOptions = Object.keys(themeColorLabels) as ThemeColor[];
+const themeModeOptions = Object.keys(themeModeLabels) as ThemeMode[];
 
 type NotificationPermissionView = NotificationPermission | 'unsupported';
 
@@ -161,6 +169,23 @@ function loadThemeColor(): ThemeColor {
 
 function saveThemeColor(themeColor: ThemeColor) {
   localStorage.setItem(themeColorKey, themeColor);
+}
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return typeof value === 'string' && themeModeOptions.includes(value as ThemeMode);
+}
+
+function loadThemeMode(): ThemeMode {
+  try {
+    const stored = localStorage.getItem(themeModeKey);
+    return isThemeMode(stored) ? stored : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+function saveThemeMode(themeMode: ThemeMode) {
+  localStorage.setItem(themeModeKey, themeMode);
 }
 
 function loadMorningCheckInState(): MorningCheckInState {
@@ -280,6 +305,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [eveningReviewState, setEveningReviewState] = useState(loadEveningReviewState);
   const [eveningMoveDates, setEveningMoveDates] = useState<Record<string, string>>({});
   const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
+  const [isSelectedDateModalOpen, setIsSelectedDateModalOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => {
     const initialDate = initialNotificationEntry?.date ? new Date(`${initialNotificationEntry.date}T00:00:00`) : initialCalendarDate;
     const clampedYear = Math.max(initialDate.getFullYear(), minimumCalendarYear);
@@ -293,6 +319,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [notificationMoveDate, setNotificationMoveDate] = useState(() => initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate));
   const [reminderSettings, setReminderSettings] = useState(loadReminderSettings);
   const [themeColor, setThemeColor] = useState(loadThemeColor);
+  const [themeMode, setThemeMode] = useState(loadThemeMode);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionView>(getNotificationPermission);
   const [testNotificationMessage, setTestNotificationMessage] = useState('');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -344,6 +371,19 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     void resyncNotificationScheduleFromStore();
   }, [reminderSettings]);
 
+  useEffect(() => {
+    if (!isSelectedDateModalOpen) {
+      return undefined;
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsSelectedDateModalOpen(false);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSelectedDateModalOpen]);
+
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
   const todayDate = todayPanelDate;
   const showMorningCheckIn = morningCheckInState[todayDate] !== 'done' || initialDailyNotificationEntry?.kind === 'morning';
@@ -369,6 +409,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     const firstDayOfMonth = new Date(safeDate.getFullYear(), safeDate.getMonth(), 1);
     setCalendarDate(firstDayOfMonth);
     setSelectedCalendarDate(formatDateKey(firstDayOfMonth));
+    setIsSelectedDateModalOpen(false);
   }
 
   function changeCalendarMonth(delta: number) {
@@ -376,9 +417,11 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       const nextMonth = addMonths(current, delta);
       if (nextMonth.getFullYear() < minimumCalendarYear) {
         setSelectedCalendarDate(minimumCalendarDateKey);
+        setIsSelectedDateModalOpen(false);
         return current;
       }
       setSelectedCalendarDate(formatDateKey(nextMonth));
+      setIsSelectedDateModalOpen(false);
       return nextMonth;
     });
   }
@@ -422,6 +465,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       return;
     }
     setSelectedCalendarDate(date);
+    setIsSelectedDateModalOpen(true);
   }
 
   async function handleAddSelectedTask(task: TaskOccurrence) {
@@ -626,6 +670,11 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     saveThemeColor(nextThemeColor);
   }
 
+  function handleThemeModeChange(nextThemeMode: ThemeMode) {
+    setThemeMode(nextThemeMode);
+    saveThemeMode(nextThemeMode);
+  }
+
   async function handleTestNotification() {
     setTestNotificationMessage('');
     if (!('Notification' in window)) {
@@ -656,19 +705,19 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   return (
-    <main className="app-shell" data-theme-color={themeColor} aria-label="Checklist Alarm PWA">
+    <main className="app-shell" data-theme-color={themeColor} data-theme-mode={themeMode} aria-label="Checklist Alarm PWA">
       <section className="phone-frame">
         <header className="app-header">
           <p className="app-kicker">Checklist Alarm</p>
-          <h1>{active.title}</h1>
         </header>
 
-        <section className="content-card" aria-label={`${active.title} 화면`}>
-          <p className="content-eyebrow">{active.eyebrow}</p>
-          <p className="panel-title" id={`${active.id}-panel`}>
-            {active.title}
-          </p>
-          <p>{active.description}</p>
+        <section
+          className="content-card"
+          data-active-tab={active.id}
+          data-scroll-mode={active.id === 'settings' ? 'scroll' : 'fixed'}
+          id={`${active.id}-panel`}
+          aria-label="활성 탭 화면"
+        >
           {notificationEntry || notificationActionStatus ? (
             <NotificationEntryPanel
               moveDate={notificationMoveDate}
@@ -706,19 +755,15 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           ) : null}
           {active.id === 'calendar' ? (
             <CalendarPanel
-              calendarQuickTitle={calendarQuickTitle}
               highlightedTaskKey={highlightedTaskKey}
               month={calendarMonth}
-              onAddTask={handleCalendarQuickAdd}
               onJumpMonth={jumpCalendarMonth}
               onMonthChange={changeCalendarMonth}
               onOpenTask={handleAddSelectedTask}
-              onQuickTitleChange={setCalendarQuickTitle}
               onSelectDate={handleSelectCalendarDate}
               onTouchEnd={handleCalendarTouchEnd}
               onTouchStart={setTouchStartX}
               selectedDate={selectedCalendarDate}
-              selectedTasks={selectedTasks}
             />
           ) : null}
           {active.id === 'settings' ? (
@@ -727,9 +772,11 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
               onReminderSettingsChange={setReminderSettings}
               onTestNotification={() => void handleTestNotification()}
               onThemeColorChange={handleThemeColorChange}
+              onThemeModeChange={handleThemeModeChange}
               reminderSettings={reminderSettings}
               testNotificationMessage={testNotificationMessage}
               themeColor={themeColor}
+              themeMode={themeMode}
             />
           ) : null}
         </section>
@@ -753,6 +800,19 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           ))}
         </nav>
       </section>
+
+      {isSelectedDateModalOpen ? (
+        <SelectedDateModal
+          calendarQuickTitle={calendarQuickTitle}
+          highlightedTaskKey={highlightedTaskKey}
+          onAddTask={handleCalendarQuickAdd}
+          onClose={() => setIsSelectedDateModalOpen(false)}
+          onOpenTask={handleAddSelectedTask}
+          onQuickTitleChange={setCalendarQuickTitle}
+          selectedDate={selectedCalendarDate}
+          selectedTasks={selectedTasks}
+        />
+      ) : null}
 
       {editingTask ? (
         <TaskDetailModal
@@ -1060,15 +1120,11 @@ function EveningReviewCard({
 type CalendarPanelProps = {
   month: CalendarMonth;
   selectedDate: string;
-  selectedTasks: TaskOccurrence[];
   highlightedTaskKey: string;
-  calendarQuickTitle: string;
   onMonthChange: (delta: number) => void;
   onJumpMonth: (year: number, monthIndex: number) => void;
   onSelectDate: (date: string) => void;
   onOpenTask: (task: TaskOccurrence) => void;
-  onQuickTitleChange: (value: string) => void;
-  onAddTask: (event: FormEvent<HTMLFormElement>) => void;
   onTouchStart: (x: number) => void;
   onTouchEnd: (x: number) => void;
 };
@@ -1076,22 +1132,17 @@ type CalendarPanelProps = {
 function CalendarPanel({
   month,
   selectedDate,
-  selectedTasks,
   highlightedTaskKey,
-  calendarQuickTitle,
   onMonthChange,
   onJumpMonth,
   onSelectDate,
   onOpenTask,
-  onQuickTitleChange,
-  onAddTask,
   onTouchStart,
   onTouchEnd,
 }: CalendarPanelProps) {
   const firstYear = Math.max(minimumCalendarYear, month.year - 3);
   const years = Array.from({ length: 7 }, (_, index) => firstYear + index);
   const isAtMinimumMonth = month.year === minimumCalendarYear && month.monthIndex === 0;
-  const selectedDateLabel = `${selectedDate} 일정`;
 
   return (
     <div className="calendar-panel">
@@ -1205,8 +1256,43 @@ function CalendarPanel({
         </div>
       </div>
 
-      <section className="selected-date-panel" aria-label="선택 날짜 일정">
-        <h2>{selectedDateLabel}</h2>
+    </div>
+  );
+}
+
+type SelectedDateModalProps = {
+  selectedDate: string;
+  selectedTasks: TaskOccurrence[];
+  highlightedTaskKey: string;
+  calendarQuickTitle: string;
+  onClose: () => void;
+  onOpenTask: (task: TaskOccurrence) => void;
+  onQuickTitleChange: (value: string) => void;
+  onAddTask: (event: FormEvent<HTMLFormElement>) => void;
+};
+
+function SelectedDateModal({
+  selectedDate,
+  selectedTasks,
+  highlightedTaskKey,
+  calendarQuickTitle,
+  onClose,
+  onOpenTask,
+  onQuickTitleChange,
+  onAddTask,
+}: SelectedDateModalProps) {
+  const selectedDateLabel = `${selectedDate} 일정`;
+
+  return (
+    <div className="selected-date-modal-layer" role="presentation">
+      <button className="modal-backdrop" aria-label="배경 클릭으로 닫기" onClick={onClose} type="button" />
+      <section className="selected-date-modal" role="dialog" aria-modal="true" aria-label={selectedDateLabel}>
+        <div className="selected-date-modal-header">
+          <h2>{selectedDateLabel}</h2>
+          <button className="modal-close" aria-label="선택 날짜 닫기" onClick={onClose} type="button">
+            ×
+          </button>
+        </div>
         <form className="quick-add" onSubmit={onAddTask}>
           <label htmlFor="calendar-add-title">선택한 날짜에 할 일 추가</label>
           <div className="quick-add-row">
@@ -1248,8 +1334,10 @@ type SettingsPanelProps = {
   notificationPermission: NotificationPermissionView;
   testNotificationMessage: string;
   themeColor: ThemeColor;
+  themeMode: ThemeMode;
   onReminderSettingsChange: (settings: ReminderSettings) => void;
   onThemeColorChange: (themeColor: ThemeColor) => void;
+  onThemeModeChange: (themeMode: ThemeMode) => void;
   onTestNotification: () => void;
 };
 
@@ -1258,8 +1346,10 @@ function SettingsPanel({
   notificationPermission,
   testNotificationMessage,
   themeColor,
+  themeMode,
   onReminderSettingsChange,
   onThemeColorChange,
+  onThemeModeChange,
   onTestNotification,
 }: SettingsPanelProps) {
   return (
@@ -1284,14 +1374,24 @@ function SettingsPanel({
         </label>
       </section>
 
-      <section className="settings-card" aria-label="테마 색상 설정">
-        <h2>테마 색상</h2>
+      <section className="settings-card" aria-label="테마 설정">
+        <h2>테마</h2>
         <label>
           테마 색상
           <select value={themeColor} onChange={(event) => onThemeColorChange(event.target.value as ThemeColor)}>
             {themeColorOptions.map((option) => (
               <option key={option} value={option}>
                 {themeColorLabels[option]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          화면 모드
+          <select value={themeMode} onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}>
+            {themeModeOptions.map((option) => (
+              <option key={option} value={option}>
+                {themeModeLabels[option]}
               </option>
             ))}
           </select>

@@ -96,25 +96,32 @@ describe('Settings reminders workflow', () => {
     expect(screen.getByText('알림 권한: 차단됨')).toBeInTheDocument();
   });
 
-  it('applies and persists a lightweight theme color selection', async () => {
+  it('applies and persists theme color and light/dark mode selections', async () => {
     stubNotification('default');
     const user = userEvent.setup();
     const firstRender = render(<App />);
     const appShell = screen.getByLabelText('Checklist Alarm PWA');
 
     expect(appShell).toHaveAttribute('data-theme-color', 'blue');
+    expect(appShell).toHaveAttribute('data-theme-mode', 'light');
     await user.click(screen.getByRole('tab', { name: '설정' }));
     expect(screen.getByLabelText('테마 색상')).toHaveValue('blue');
+    expect(screen.getByLabelText('화면 모드')).toHaveValue('light');
 
     await user.selectOptions(screen.getByLabelText('테마 색상'), 'rose');
+    await user.selectOptions(screen.getByLabelText('화면 모드'), 'dark');
     expect(appShell).toHaveAttribute('data-theme-color', 'rose');
+    expect(appShell).toHaveAttribute('data-theme-mode', 'dark');
     expect(localStorage.getItem('checklist-alarm:theme-color')).toBe('rose');
+    expect(localStorage.getItem('checklist-alarm:theme-mode')).toBe('dark');
 
     firstRender.unmount();
     render(<App />);
     expect(screen.getByLabelText('Checklist Alarm PWA')).toHaveAttribute('data-theme-color', 'rose');
+    expect(screen.getByLabelText('Checklist Alarm PWA')).toHaveAttribute('data-theme-mode', 'dark');
     await user.click(screen.getByRole('tab', { name: '설정' }));
     expect(screen.getByLabelText('테마 색상')).toHaveValue('rose');
+    expect(screen.getByLabelText('화면 모드')).toHaveValue('dark');
   });
 
   it('uses the backend push test notification flow when permission is granted', async () => {
