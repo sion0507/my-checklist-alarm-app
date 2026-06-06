@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { addMonths, formatDateKey, getCalendarMonthDays, getVisibleTaskPills, weekdayHeaders, type CalendarMonth } from './calendarUtils';
 import { buildSevenDayNotificationSchedule } from './notificationPlanner';
 import { enablePushSubscription, sendBackendTestPush } from './pushClient';
@@ -326,6 +326,8 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [editingTask, setEditingTask] = useState<TaskOccurrence | null>(null);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
   const didInitializeReminderSettings = useRef(false);
+  const selectedDateModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const selectedDateModalReturnFocusRef = useRef<HTMLElement | null>(null);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const appToday = formatDateKey(initialCalendarDate);
   const todayPanelDate = initialDailyNotificationEntry?.date ?? appToday;
@@ -375,9 +377,10 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     if (!isSelectedDateModalOpen) {
       return undefined;
     }
+    selectedDateModalCloseButtonRef.current?.focus();
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setIsSelectedDateModalOpen(false);
+        closeSelectedDateModal();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -460,10 +463,20 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     await refreshTasks();
   }
 
-  async function handleSelectCalendarDate(date: string) {
+  function closeSelectedDateModal() {
+    setIsSelectedDateModalOpen(false);
+    const returnFocusTarget = selectedDateModalReturnFocusRef.current;
+    selectedDateModalReturnFocusRef.current = null;
+    if (returnFocusTarget) {
+      window.requestAnimationFrame(() => returnFocusTarget.focus());
+    }
+  }
+
+  async function handleSelectCalendarDate(date: string, returnFocusTarget?: HTMLElement) {
     if (date < minimumCalendarDateKey) {
       return;
     }
+    selectedDateModalReturnFocusRef.current = returnFocusTarget ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setSelectedCalendarDate(date);
     setIsSelectedDateModalOpen(true);
   }
@@ -804,9 +817,10 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       {isSelectedDateModalOpen ? (
         <SelectedDateModal
           calendarQuickTitle={calendarQuickTitle}
+          closeButtonRef={selectedDateModalCloseButtonRef}
           highlightedTaskKey={highlightedTaskKey}
           onAddTask={handleCalendarQuickAdd}
-          onClose={() => setIsSelectedDateModalOpen(false)}
+          onClose={closeSelectedDateModal}
           onOpenTask={handleAddSelectedTask}
           onQuickTitleChange={setCalendarQuickTitle}
           selectedDate={selectedCalendarDate}
@@ -1123,7 +1137,7 @@ type CalendarPanelProps = {
   highlightedTaskKey: string;
   onMonthChange: (delta: number) => void;
   onJumpMonth: (year: number, monthIndex: number) => void;
-  onSelectDate: (date: string) => void;
+  onSelectDate: (date: string, returnFocusTarget?: HTMLElement) => void;
   onOpenTask: (task: TaskOccurrence) => void;
   onTouchStart: (x: number) => void;
   onTouchEnd: (x: number) => void;
@@ -1216,11 +1230,11 @@ function CalendarPanel({
                 className={dayClasses}
                 data-testid="calendar-day-cell"
                 key={day.date}
-                onClick={() => onSelectDate(day.date)}
+                onClick={(event) => onSelectDate(day.date, event.currentTarget)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    onSelectDate(day.date);
+                    onSelectDate(day.date, event.currentTarget);
                   }
                 }}
                 role="button"
@@ -1265,6 +1279,7 @@ type SelectedDateModalProps = {
   selectedTasks: TaskOccurrence[];
   highlightedTaskKey: string;
   calendarQuickTitle: string;
+  closeButtonRef: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onOpenTask: (task: TaskOccurrence) => void;
   onQuickTitleChange: (value: string) => void;
@@ -1276,6 +1291,7 @@ function SelectedDateModal({
   selectedTasks,
   highlightedTaskKey,
   calendarQuickTitle,
+  closeButtonRef,
   onClose,
   onOpenTask,
   onQuickTitleChange,
@@ -1289,7 +1305,7 @@ function SelectedDateModal({
       <section className="selected-date-modal" role="dialog" aria-modal="true" aria-label={selectedDateLabel}>
         <div className="selected-date-modal-header">
           <h2>{selectedDateLabel}</h2>
-          <button className="modal-close" aria-label="선택 날짜 닫기" onClick={onClose} type="button">
+          <button ref={closeButtonRef} className="modal-close" aria-label="선택 날짜 닫기" onClick={onClose} type="button">
             ×
           </button>
         </div>

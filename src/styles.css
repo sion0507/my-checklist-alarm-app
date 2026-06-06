@@ -189,7 +189,7 @@ h1 {
 .quick-add label,
 .morning-quick-add label,
 .task-modal label {
-  color: #334155;
+  color: var(--theme-text);
   display: grid;
   font-size: 0.88rem;
   font-weight: 700;
@@ -209,7 +209,7 @@ h1 {
 .task-modal select,
 .task-modal textarea {
   background: var(--theme-surface);
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
   color: var(--theme-text);
   min-width: 0;
@@ -360,7 +360,7 @@ h1 {
 }
 
 .evening-review-list span {
-  color: #64748b;
+  color: var(--theme-muted);
   font-size: 0.78rem;
   margin-top: 3px;
 }
@@ -385,7 +385,7 @@ h1 {
 }
 
 .evening-review-actions label {
-  color: #334155;
+  color: var(--theme-text);
   display: grid;
   font-size: 0.78rem;
   font-weight: 800;
@@ -393,8 +393,8 @@ h1 {
 }
 
 .evening-review-actions input {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--theme-card);
+  border: 1px solid var(--theme-border);
   color: var(--theme-text);
 }
 
@@ -418,7 +418,7 @@ h1 {
 
 .task-item {
   background: var(--theme-surface);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
   padding: 14px;
 }
@@ -491,7 +491,7 @@ h1 {
 }
 
 .notification-entry-actions label {
-  color: #334155;
+  color: var(--theme-text);
   display: grid;
   font-size: 0.78rem;
   font-weight: 800;
@@ -499,8 +499,8 @@ h1 {
 }
 
 .notification-entry-actions input {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--theme-card);
+  border: 1px solid var(--theme-border);
   color: var(--theme-text);
 }
 
@@ -525,7 +525,7 @@ h1 {
 }
 
 .task-meta {
-  color: #64748b;
+  color: var(--theme-muted);
   display: flex;
   flex-wrap: wrap;
   font-size: 0.78rem;
@@ -547,10 +547,10 @@ h1 {
 }
 
 .task-actions button {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--theme-card);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  color: #334155;
+  color: var(--theme-text);
   font-size: 0.78rem;
   font-weight: 800;
   padding: 8px 10px;
@@ -620,7 +620,7 @@ h1 {
 
 .calendar-jump {
   background: var(--theme-surface);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--theme-border);
   border-radius: 20px;
   gap: 10px;
   grid-template-columns: 1fr 1fr;
@@ -628,7 +628,7 @@ h1 {
 }
 
 .calendar-jump label {
-  color: #475569;
+  color: var(--theme-muted);
   display: grid;
   font-size: 0.75rem;
   font-weight: 800;
@@ -636,27 +636,27 @@ h1 {
 }
 
 .calendar-jump select {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--theme-card);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
   color: var(--theme-text);
   padding: 9px 10px;
 }
 
 .calendar-grid-wrap {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--theme-card);
+  border: 1px solid var(--theme-border);
   border-radius: 24px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   overflow: hidden;
 }
 
 .calendar-weekdays {
-  background: #f1f5f9;
+  background: var(--theme-surface-muted);
 }
 
 .weekday {
-  color: #64748b;
+  color: var(--theme-muted);
   font-size: 0.7rem;
   font-weight: 900;
   padding: 9px 2px;
@@ -668,10 +668,10 @@ h1 {
 }
 
 .calendar-day {
-  background: #ffffff;
+  background: var(--theme-card);
   border: 0;
-  border-right: 1px solid #e2e8f0;
-  border-top: 1px solid #e2e8f0;
+  border-right: 1px solid var(--theme-border);
+  border-top: 1px solid var(--theme-border);
   color: var(--theme-text);
   min-width: 0;
   padding: 6px 4px;
@@ -684,7 +684,7 @@ h1 {
 
 .calendar-day.adjacent-month {
   background: var(--theme-surface);
-  color: #94a3b8;
+  color: var(--theme-muted);
 }
 
 .calendar-day.weekend .day-number {
@@ -754,8 +754,8 @@ h1 {
 }
 
 .more-pill {
-  background: #e2e8f0;
-  color: #475569;
+  background: var(--theme-border);
+  color: var(--theme-muted);
 }
 
 .selected-date-modal-layer {
@@ -830,8 +830,8 @@ h1 {
 }
 
 .selected-task-list button {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--theme-card);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
   color: var(--theme-text);
   font-weight: 800;
@@ -849,7 +849,7 @@ h1 {
 .settings-card,
 .storage-warning {
   background: var(--theme-surface);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--theme-border);
   border-radius: 22px;
   display: grid;
   gap: 12px;
@@ -864,7 +864,7 @@ h1 {
 }
 
 .settings-card label {
-  color: #334155;
+  color: var(--theme-text);
   display: grid;
   font-size: 0.88rem;
   font-weight: 800;
@@ -873,8 +873,8 @@ h1 {
 
 .settings-card input,
 .settings-card select {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--theme-card);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
   color: var(--theme-text);
   padding: 12px 14px;
@@ -906,7 +906,7 @@ h1 {
 }
 
 .permission-unsupported {
-  background: #f1f5f9;
+  background: var(--theme-surface-muted);
   color: #475569 !important;
 }
 
@@ -944,7 +944,7 @@ h1 {
 }
 
 .task-modal {
-  background: #ffffff;
+  background: var(--theme-card);
   border-radius: 26px;
   box-shadow: 0 26px 80px rgba(15, 23, 42, 0.24);
   display: grid;
@@ -968,10 +968,10 @@ h1 {
 }
 
 .modal-header button {
-  background: #f1f5f9;
+  background: var(--theme-surface-muted);
   border: 0;
   border-radius: 999px;
-  color: #334155;
+  color: var(--theme-text);
   font-size: 1.3rem;
   height: 36px;
   width: 36px;
@@ -1020,7 +1020,7 @@ h1 {
   background: transparent;
   border: 0;
   border-radius: 18px;
-  color: #64748b;
+  color: var(--theme-muted);
   display: flex;
   flex-direction: column;
   font-size: 0.78rem;
