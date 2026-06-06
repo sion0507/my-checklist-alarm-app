@@ -60,6 +60,20 @@ describe('Evening unfinished-task review workflow', () => {
     expect(await within(card).findByText('알림으로 리뷰할 일')).toBeInTheDocument();
   });
 
+  it('honors the URL date for a stale evening notification tapped on a later day', async () => {
+    await createTask({ title: '어제 리뷰할 일', date: '2026-06-01', time: '', recurrence: 'none', memo: '', notify: false });
+    await createTask({ title: '오늘 리뷰할 일', date: '2026-06-02', time: '', recurrence: 'none', memo: '', notify: false });
+    window.history.pushState({}, '', '/?date=2026-06-01&entry=evening');
+
+    render(<App initialCalendarDate={new Date('2026-06-02T16:42:00')} />);
+
+    const card = await screen.findByRole('region', { name: '저녁 미완료 리뷰' });
+    expect(await within(card).findByText('어제 리뷰할 일')).toBeInTheDocument();
+    expect(within(card).queryByText('오늘 리뷰할 일')).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '어제 리뷰할 일 완료' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '오늘 리뷰할 일 완료' })).not.toBeInTheDocument();
+  });
+
   it('lets a user leave an unfinished task as-is for the day', async () => {
     await createTask({ title: '내일 계속하기', date: '2026-06-01', time: '', recurrence: 'none', memo: '', notify: false });
     const user = userEvent.setup();
