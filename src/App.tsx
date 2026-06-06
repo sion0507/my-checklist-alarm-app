@@ -264,6 +264,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const didInitializeReminderSettings = useRef(false);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const appToday = formatDateKey(initialCalendarDate);
+  const todayPanelDate = initialDailyNotificationEntry?.date ?? appToday;
 
   async function syncNotificationSchedule(storedTasks: Task[]) {
     const endpoint = localStorage.getItem(pushSubscriptionEndpointKey);
@@ -280,8 +281,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   async function refreshTasks() {
-    const today = appToday;
-    const [todayOccurrences, storedTasks] = await Promise.all([listTaskOccurrencesForDate(today), listTasks()]);
+    const [todayOccurrences, storedTasks] = await Promise.all([listTaskOccurrencesForDate(todayPanelDate), listTasks()]);
     setTasks(todayOccurrences);
     setAllTasks(storedTasks);
     await syncNotificationSchedule(storedTasks);
@@ -308,7 +308,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }, [reminderSettings]);
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
-  const todayDate = appToday;
+  const todayDate = todayPanelDate;
   const showMorningCheckIn = morningCheckInState[todayDate] !== 'done' || initialDailyNotificationEntry?.kind === 'morning';
   const showEveningReview = isAfterReminderTime(initialCalendarDate, reminderSettings.eveningTime) || initialDailyNotificationEntry?.kind === 'evening';
   const reviewedEveningTasks = eveningReviewState[todayDate] ?? [];
@@ -392,7 +392,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
     await createTask({
       title,
-      date: appToday,
+      date: todayPanelDate,
       time: '',
       recurrence: 'none',
       memo: '',
@@ -411,7 +411,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
     await createTask({
       title,
-      date: appToday,
+      date: todayPanelDate,
       time: '',
       recurrence: 'none',
       memo: '',
@@ -423,7 +423,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
   function completeMorningCheckIn() {
     setMorningCheckInState((current) => {
-      const next = { ...current, [appToday]: 'done' as const };
+      const next = { ...current, [todayPanelDate]: 'done' as const };
       saveMorningCheckInState(next);
       return next;
     });
@@ -431,8 +431,8 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
   function markEveningTaskReviewed(task: TaskOccurrence) {
     setEveningReviewState((current) => {
-      const reviewed = current[appToday] ?? [];
-      const next = { ...current, [appToday]: Array.from(new Set([...reviewed, taskReviewKey(task)])) };
+      const reviewed = current[todayPanelDate] ?? [];
+      const next = { ...current, [todayPanelDate]: Array.from(new Set([...reviewed, taskReviewKey(task)])) };
       saveEveningReviewState(next);
       return next;
     });

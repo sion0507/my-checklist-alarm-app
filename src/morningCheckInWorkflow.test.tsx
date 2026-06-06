@@ -69,4 +69,19 @@ describe('Morning check-in workflow', () => {
     expect(await within(card).findByText(/오늘 할 일\s*1\s*개를 확인해 보세요\./)).toBeInTheDocument();
     expect(within(card).getByRole('list', { name: '아침 체크인 오늘 할 일 요약' })).toHaveTextContent('알림으로 확인할 일');
   });
+
+  it('honors the URL date for a stale morning notification tapped on a later day', async () => {
+    await createTask({ title: '어제 알림 할 일', date: '2026-06-01', time: '09:00', recurrence: 'none', memo: '', notify: true });
+    await createTask({ title: '오늘 일반 할 일', date: '2026-06-02', time: '09:00', recurrence: 'none', memo: '', notify: true });
+    localStorage.setItem('checklist-alarm:morning-check-in-state', JSON.stringify({ '2026-06-02': 'done' }));
+    window.history.pushState({}, '', '/?date=2026-06-01&entry=morning');
+
+    render(<App initialCalendarDate={new Date('2026-06-02T10:00:00')} />);
+
+    const card = await screen.findByRole('region', { name: '아침 체크인 카드' });
+    expect(await within(card).findByText(/오늘 할 일\s*1\s*개를 확인해 보세요\./)).toBeInTheDocument();
+    expect(within(card).getByRole('list', { name: '아침 체크인 오늘 할 일 요약' })).toHaveTextContent('어제 알림 할 일');
+    expect(screen.getByRole('checkbox', { name: '어제 알림 할 일 완료' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '오늘 일반 할 일 완료' })).not.toBeInTheDocument();
+  });
 });
