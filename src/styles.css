@@ -41,6 +41,24 @@ button {
   --theme-border: #e2e8f0;
   --theme-text: #0f172a;
   --theme-muted: #64748b;
+  --theme-morning-surface: #fff7df;
+  --theme-morning-surface-end: #eaf2ff;
+  --theme-morning-border: #fbbf24;
+  --theme-morning-text: #334155;
+  --theme-morning-accent: #92400e;
+  --theme-morning-action-text: #ffffff;
+  --theme-evening-surface: #f1edff;
+  --theme-evening-surface-end: #f8fafc;
+  --theme-evening-border: #ddd6fe;
+  --theme-evening-text: #334155;
+  --theme-evening-accent: #5b21b6;
+  --theme-warning-surface: #fff7ed;
+  --theme-warning-border: #fed7aa;
+  --theme-warning-text: #9a3412;
+  --theme-info-surface: #e0f2fe;
+  --theme-info-text: #0369a1;
+  --theme-success-surface: #dcfce7;
+  --theme-success-text: #166534;
   align-items: center;
   background: var(--theme-app-background);
   color: var(--theme-text);
@@ -80,6 +98,24 @@ button {
   --theme-border: #334155;
   --theme-text: #e5edf7;
   --theme-muted: #a7b4c7;
+  --theme-morning-surface: #3a2b12;
+  --theme-morning-surface-end: #1f2937;
+  --theme-morning-border: #b45309;
+  --theme-morning-text: #f8e8c7;
+  --theme-morning-accent: #facc15;
+  --theme-morning-action-text: #1f2937;
+  --theme-evening-surface: #31264d;
+  --theme-evening-surface-end: #1f2937;
+  --theme-evening-border: #6d5ca6;
+  --theme-evening-text: #eee7ff;
+  --theme-evening-accent: #d8b4fe;
+  --theme-warning-surface: #431f13;
+  --theme-warning-border: #9a3412;
+  --theme-warning-text: #fed7aa;
+  --theme-info-surface: #12364a;
+  --theme-info-text: #bae6fd;
+  --theme-success-surface: #14351f;
+  --theme-success-text: #bbf7d0;
 }
 
 .app-shell[data-theme-mode='dark'][data-theme-color='blue'] {
@@ -228,8 +264,8 @@ h1 {
 }
 
 .morning-check-in {
-  background: linear-gradient(135deg, #fef3c7, #dbeafe);
-  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: linear-gradient(135deg, var(--theme-morning-surface), var(--theme-morning-surface-end));
+  border: 1px solid color-mix(in srgb, var(--theme-morning-border) 65%, transparent);
   border-radius: 24px;
   display: grid;
   gap: 14px;
@@ -245,14 +281,14 @@ h1 {
 }
 
 .morning-check-in h2 {
-  color: var(--theme-text);
+  color: var(--theme-morning-text);
   font-size: 1.35rem;
   letter-spacing: -0.04em;
   margin: 0;
 }
 
 .morning-kicker {
-  color: #92400e !important;
+  color: var(--theme-morning-accent) !important;
   font-size: 0.72rem !important;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -261,10 +297,10 @@ h1 {
 }
 
 .morning-check-in-header button {
-  background: var(--theme-text);
+  background: var(--theme-morning-accent);
   border: 0;
   border-radius: 999px;
-  color: #ffffff;
+  color: var(--theme-morning-action-text);
   font-size: 0.75rem;
   font-weight: 800;
   padding: 9px 12px;
@@ -273,7 +309,7 @@ h1 {
 
 .morning-summary,
 .morning-empty {
-  color: #334155 !important;
+  color: var(--theme-morning-text) !important;
   font-weight: 700;
   margin: 0 !important;
 }
@@ -286,7 +322,7 @@ h1 {
 }
 
 .morning-task-list li {
-  color: var(--theme-text);
+  color: var(--theme-morning-text);
   font-weight: 800;
 }
 
@@ -296,8 +332,8 @@ h1 {
 }
 
 .evening-review-card {
-  background: linear-gradient(135deg, #ede9fe, var(--theme-surface));
-  border: 1px solid rgba(124, 58, 237, 0.28);
+  background: linear-gradient(135deg, var(--theme-evening-surface), var(--theme-evening-surface-end));
+  border: 1px solid color-mix(in srgb, var(--theme-evening-border) 72%, transparent);
   border-radius: 24px;
   display: grid;
   gap: 14px;
@@ -312,14 +348,14 @@ h1 {
 }
 
 .evening-review-header h2 {
-  color: var(--theme-text);
+  color: var(--theme-evening-text);
   font-size: 1.35rem;
   letter-spacing: -0.04em;
   margin: 0;
 }
 
 .evening-kicker {
-  color: #5b21b6 !important;
+  color: var(--theme-evening-accent) !important;
   font-size: 0.72rem !important;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -328,7 +364,7 @@ h1 {
 }
 
 .evening-empty {
-  color: #334155 !important;
+  color: var(--theme-evening-text) !important;
   font-weight: 700;
   margin: 0 !important;
 }
@@ -342,8 +378,8 @@ h1 {
 }
 
 .evening-review-list li {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid #ddd6fe;
+  background: color-mix(in srgb, var(--theme-card) 72%, var(--theme-evening-surface));
+  border: 1px solid var(--theme-evening-border);
   border-radius: 18px;
   display: grid;
   gap: 10px;
@@ -356,11 +392,11 @@ h1 {
 }
 
 .evening-review-list strong {
-  color: var(--theme-text);
+  color: var(--theme-evening-text);
 }
 
 .evening-review-list span {
-  color: var(--theme-muted);
+  color: color-mix(in srgb, var(--theme-evening-text) 72%, var(--theme-muted));
   font-size: 0.78rem;
   margin-top: 3px;
 }
@@ -442,7 +478,7 @@ h1 {
 }
 
 .notification-entry-kicker {
-  color: #0369a1 !important;
+  color: var(--theme-info-text) !important;
   font-size: 0.72rem !important;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -881,9 +917,9 @@ h1 {
 }
 
 .permission-pill {
-  background: #e0f2fe;
+  background: var(--theme-info-surface);
   border-radius: 999px;
-  color: #0369a1 !important;
+  color: var(--theme-info-text) !important;
   font-size: 0.88rem !important;
   font-weight: 800;
   margin: 0 !important;
@@ -891,23 +927,23 @@ h1 {
 }
 
 .permission-granted {
-  background: #dcfce7;
-  color: #166534 !important;
+  background: var(--theme-success-surface);
+  color: var(--theme-success-text) !important;
 }
 
 .permission-denied,
 .storage-warning {
-  background: #fff7ed;
-  border-color: #fed7aa;
+  background: var(--theme-warning-surface);
+  border-color: var(--theme-warning-border);
 }
 
 .permission-denied {
-  color: #9a3412 !important;
+  color: var(--theme-warning-text) !important;
 }
 
 .permission-unsupported {
   background: var(--theme-surface-muted);
-  color: #475569 !important;
+  color: var(--theme-muted) !important;
 }
 
 .test-notification-button {
@@ -921,7 +957,7 @@ h1 {
 
 .notification-feedback,
 .storage-warning p {
-  color: #475569 !important;
+  color: var(--theme-muted) !important;
   font-size: 0.9rem !important;
   line-height: 1.55;
   margin: 0 !important;
@@ -929,7 +965,7 @@ h1 {
 
 .storage-warning h2,
 .storage-warning p {
-  color: #9a3412 !important;
+  color: var(--theme-warning-text) !important;
 }
 
 .modal-backdrop {
