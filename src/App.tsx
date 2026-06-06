@@ -70,6 +70,7 @@ const reminderSettingsKey = 'checklist-alarm:reminder-settings';
 const pushSubscriptionEndpointKey = 'checklist-alarm:push-subscription-endpoint';
 const morningCheckInStateKey = 'checklist-alarm:morning-check-in-state';
 const eveningReviewStateKey = 'checklist-alarm:evening-review-state';
+const themeColorKey = 'checklist-alarm:theme-color';
 const minimumCalendarYear = 2026;
 const minimumCalendarDateKey = `${minimumCalendarYear}-01-01`;
 
@@ -82,6 +83,17 @@ type ReminderSettings = {
   morningTime: string;
   eveningTime: string;
 };
+
+type ThemeColor = 'blue' | 'green' | 'rose' | 'purple';
+
+const themeColorLabels: Record<ThemeColor, string> = {
+  blue: '파랑',
+  green: '초록',
+  rose: '로즈',
+  purple: '보라',
+};
+
+const themeColorOptions = Object.keys(themeColorLabels) as ThemeColor[];
 
 type NotificationPermissionView = NotificationPermission | 'unsupported';
 
@@ -132,6 +144,23 @@ function loadReminderSettings(): ReminderSettings {
 
 function saveReminderSettings(settings: ReminderSettings) {
   localStorage.setItem(reminderSettingsKey, JSON.stringify(settings));
+}
+
+function isThemeColor(value: unknown): value is ThemeColor {
+  return typeof value === 'string' && themeColorOptions.includes(value as ThemeColor);
+}
+
+function loadThemeColor(): ThemeColor {
+  try {
+    const stored = localStorage.getItem(themeColorKey);
+    return isThemeColor(stored) ? stored : 'blue';
+  } catch {
+    return 'blue';
+  }
+}
+
+function saveThemeColor(themeColor: ThemeColor) {
+  localStorage.setItem(themeColorKey, themeColor);
 }
 
 function loadMorningCheckInState(): MorningCheckInState {
@@ -263,6 +292,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   });
   const [notificationMoveDate, setNotificationMoveDate] = useState(() => initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate));
   const [reminderSettings, setReminderSettings] = useState(loadReminderSettings);
+  const [themeColor, setThemeColor] = useState(loadThemeColor);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionView>(getNotificationPermission);
   const [testNotificationMessage, setTestNotificationMessage] = useState('');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -591,6 +621,11 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     await refreshTasks();
   }
 
+  function handleThemeColorChange(nextThemeColor: ThemeColor) {
+    setThemeColor(nextThemeColor);
+    saveThemeColor(nextThemeColor);
+  }
+
   async function handleTestNotification() {
     setTestNotificationMessage('');
     if (!('Notification' in window)) {
@@ -621,7 +656,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   return (
-    <main className="app-shell" aria-label="Checklist Alarm PWA">
+    <main className="app-shell" data-theme-color={themeColor} aria-label="Checklist Alarm PWA">
       <section className="phone-frame">
         <header className="app-header">
           <p className="app-kicker">Checklist Alarm</p>
@@ -691,8 +726,10 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
               notificationPermission={notificationPermission}
               onReminderSettingsChange={setReminderSettings}
               onTestNotification={() => void handleTestNotification()}
+              onThemeColorChange={handleThemeColorChange}
               reminderSettings={reminderSettings}
               testNotificationMessage={testNotificationMessage}
+              themeColor={themeColor}
             />
           ) : null}
         </section>
@@ -1210,7 +1247,9 @@ type SettingsPanelProps = {
   reminderSettings: ReminderSettings;
   notificationPermission: NotificationPermissionView;
   testNotificationMessage: string;
+  themeColor: ThemeColor;
   onReminderSettingsChange: (settings: ReminderSettings) => void;
+  onThemeColorChange: (themeColor: ThemeColor) => void;
   onTestNotification: () => void;
 };
 
@@ -1218,7 +1257,9 @@ function SettingsPanel({
   reminderSettings,
   notificationPermission,
   testNotificationMessage,
+  themeColor,
   onReminderSettingsChange,
+  onThemeColorChange,
   onTestNotification,
 }: SettingsPanelProps) {
   return (
@@ -1240,6 +1281,20 @@ function SettingsPanel({
             value={reminderSettings.eveningTime}
             onChange={(event) => onReminderSettingsChange({ ...reminderSettings, eveningTime: event.target.value })}
           />
+        </label>
+      </section>
+
+      <section className="settings-card" aria-label="테마 색상 설정">
+        <h2>테마 색상</h2>
+        <label>
+          테마 색상
+          <select value={themeColor} onChange={(event) => onThemeColorChange(event.target.value as ThemeColor)}>
+            {themeColorOptions.map((option) => (
+              <option key={option} value={option}>
+                {themeColorLabels[option]}
+              </option>
+            ))}
+          </select>
         </label>
       </section>
 

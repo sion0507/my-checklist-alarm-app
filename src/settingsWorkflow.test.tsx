@@ -96,6 +96,27 @@ describe('Settings reminders workflow', () => {
     expect(screen.getByText('알림 권한: 차단됨')).toBeInTheDocument();
   });
 
+  it('applies and persists a lightweight theme color selection', async () => {
+    stubNotification('default');
+    const user = userEvent.setup();
+    const firstRender = render(<App />);
+    const appShell = screen.getByLabelText('Checklist Alarm PWA');
+
+    expect(appShell).toHaveAttribute('data-theme-color', 'blue');
+    await user.click(screen.getByRole('tab', { name: '설정' }));
+    expect(screen.getByLabelText('테마 색상')).toHaveValue('blue');
+
+    await user.selectOptions(screen.getByLabelText('테마 색상'), 'rose');
+    expect(appShell).toHaveAttribute('data-theme-color', 'rose');
+    expect(localStorage.getItem('checklist-alarm:theme-color')).toBe('rose');
+
+    firstRender.unmount();
+    render(<App />);
+    expect(screen.getByLabelText('Checklist Alarm PWA')).toHaveAttribute('data-theme-color', 'rose');
+    await user.click(screen.getByRole('tab', { name: '설정' }));
+    expect(screen.getByLabelText('테마 색상')).toHaveValue('rose');
+  });
+
   it('uses the backend push test notification flow when permission is granted', async () => {
     stubNotification('granted');
     const { subscribe } = stubServiceWorker();
