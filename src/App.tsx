@@ -70,6 +70,8 @@ const reminderSettingsKey = 'checklist-alarm:reminder-settings';
 const pushSubscriptionEndpointKey = 'checklist-alarm:push-subscription-endpoint';
 const morningCheckInStateKey = 'checklist-alarm:morning-check-in-state';
 const eveningReviewStateKey = 'checklist-alarm:evening-review-state';
+const minimumCalendarYear = 2026;
+const minimumCalendarDateKey = `${minimumCalendarYear}-01-01`;
 
 const defaultReminderSettings: ReminderSettings = {
   morningTime: '08:00',
@@ -251,9 +253,14 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
   const [calendarDate, setCalendarDate] = useState(() => {
     const initialDate = initialNotificationEntry?.date ? new Date(`${initialNotificationEntry.date}T00:00:00`) : initialCalendarDate;
-    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+    const clampedYear = Math.max(initialDate.getFullYear(), minimumCalendarYear);
+    const clampedMonth = initialDate.getFullYear() < minimumCalendarYear ? 0 : initialDate.getMonth();
+    return new Date(clampedYear, clampedMonth, 1);
   });
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => {
+    const initialSelectedDate = initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate);
+    return initialSelectedDate < minimumCalendarDateKey ? minimumCalendarDateKey : initialSelectedDate;
+  });
   const [notificationMoveDate, setNotificationMoveDate] = useState(() => initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate));
   const [reminderSettings, setReminderSettings] = useState(loadReminderSettings);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionView>(getNotificationPermission);
@@ -328,7 +335,8 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     : null;
 
   function selectCalendarMonth(date: Date) {
-    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    const safeDate = date.getFullYear() < minimumCalendarYear ? new Date(minimumCalendarYear, 0, 1) : date;
+    const firstDayOfMonth = new Date(safeDate.getFullYear(), safeDate.getMonth(), 1);
     setCalendarDate(firstDayOfMonth);
     setSelectedCalendarDate(formatDateKey(firstDayOfMonth));
   }
@@ -336,13 +344,17 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   function changeCalendarMonth(delta: number) {
     setCalendarDate((current) => {
       const nextMonth = addMonths(current, delta);
+      if (nextMonth.getFullYear() < minimumCalendarYear) {
+        setSelectedCalendarDate(minimumCalendarDateKey);
+        return current;
+      }
       setSelectedCalendarDate(formatDateKey(nextMonth));
       return nextMonth;
     });
   }
 
   function jumpCalendarMonth(year: number, monthIndex: number) {
-    selectCalendarMonth(new Date(year, monthIndex, 1));
+    selectCalendarMonth(new Date(Math.max(year, minimumCalendarYear), year < minimumCalendarYear ? 0 : monthIndex, 1));
   }
 
   function handleCalendarTouchEnd(x: number) {
@@ -376,6 +388,9 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   async function handleSelectCalendarDate(date: string) {
+    if (date < minimumCalendarDateKey) {
+      return;
+    }
     setSelectedCalendarDate(date);
   }
 
@@ -1036,7 +1051,9 @@ function CalendarPanel({
   onTouchStart,
   onTouchEnd,
 }: CalendarPanelProps) {
-  const years = Array.from({ length: 7 }, (_, index) => month.year - 3 + index);
+  const firstYear = Math.max(minimumCalendarYear, month.year - 3);
+  const years = Array.from({ length: 7 }, (_, index) => firstYear + index);
+  const isAtMinimumMonth = month.year === minimumCalendarYear && month.monthIndex === 0;
   const selectedDateLabel = `${selectedDate} 일정`;
 
   return (
@@ -1047,7 +1064,7 @@ function CalendarPanel({
           <h2>{month.title}</h2>
         </div>
         <div className="calendar-nav" aria-label="월 이동">
-          <button aria-label="이전 달" onClick={() => onMonthChange(-1)} type="button">
+          <button aria-label="이전 달" disabled={isAtMinimumMonth} onClick={() => onMonthChange(-1)} type="button">
             ‹
           </button>
           <button aria-label="다음 달" onClick={() => onMonthChange(1)} type="button">

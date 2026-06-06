@@ -58,4 +58,21 @@ describe('Calendar month view workflow', () => {
     expect(screen.getByRole('heading', { name: 'March 2027' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '2027-03-01 일정' })).toBeInTheDocument();
   });
+
+  it('limits calendar year selection and navigation to 2026 or later', async () => {
+    const user = userEvent.setup();
+    render(<App initialCalendarDate={new Date(2026, 0, 1)} />);
+    await user.click(screen.getByRole('tab', { name: /캘린더/ }));
+
+    expect(screen.getByRole('heading', { name: 'January 2026' })).toBeInTheDocument();
+    expect(screen.getByLabelText('연도 선택')).not.toHaveTextContent('2025');
+    expect(screen.getByRole('button', { name: '이전 달' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: '이전 달' }));
+    expect(screen.getByRole('heading', { name: 'January 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2026-01-01 일정' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /2025-12-31/ }));
+    expect(screen.getByRole('heading', { name: '2026-01-01 일정' })).toBeInTheDocument();
+  });
 });
