@@ -67,6 +67,8 @@ button {
   --theme-info-text: #0369a1;
   --theme-success-surface: #dcfce7;
   --theme-success-text: #166534;
+  --theme-holiday-text: #b45309;
+  --theme-anniversary-text: #db2777;
   align-items: center;
   background: var(--theme-app-background);
   color: var(--theme-text);
@@ -128,6 +130,8 @@ button {
   --theme-info-text: #bae6fd;
   --theme-success-surface: #14351f;
   --theme-success-text: #bbf7d0;
+  --theme-holiday-text: #facc15;
+  --theme-anniversary-text: #f9a8d4;
 }
 
 .app-shell[data-theme-mode='dark'][data-theme-color='blue'] {
@@ -755,7 +759,7 @@ h1 {
 }
 
 .date-marker {
-  color: #b45309;
+  color: var(--theme-holiday-text);
   display: block;
   font-size: 0.58rem;
   font-weight: 800;
@@ -765,7 +769,7 @@ h1 {
 }
 
 .marker-anniversary .date-marker {
-  color: #db2777;
+  color: var(--theme-anniversary-text);
 }
 
 .task-pill-stack {
