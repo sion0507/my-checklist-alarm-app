@@ -727,7 +727,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
         <section
           className="content-card"
           data-active-tab={active.id}
-          data-scroll-mode={active.id === 'settings' ? 'scroll' : active.id === 'calendar' ? 'internal' : 'fixed'}
+          data-scroll-mode={active.id === 'settings' ? 'scroll' : active.id === 'calendar' || active.id === 'today' ? 'internal' : 'fixed'}
           id={`${active.id}-panel`}
           aria-label="활성 탭 화면"
         >

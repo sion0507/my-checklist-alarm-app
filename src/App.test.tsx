@@ -15,12 +15,13 @@ describe('PWA app shell', () => {
     expect(screen.getByRole('tab', { name: '설정' })).toBeInTheDocument();
   });
 
-  it('marks Calendar for fixed-frame internal overflow and Settings for direct scrolling', async () => {
+  it('marks Today and Calendar for fixed-frame internal overflow and Settings for direct scrolling', async () => {
     const user = userEvent.setup();
     render(<App />);
 
     const contentCard = screen.getByLabelText('활성 탭 화면');
-    expect(contentCard).toHaveAttribute('data-scroll-mode', 'fixed');
+    expect(contentCard).toHaveAttribute('data-active-tab', 'today');
+    expect(contentCard).toHaveAttribute('data-scroll-mode', 'internal');
 
     await user.click(screen.getByRole('tab', { name: '캘린더' }));
     expect(screen.queryByRole('heading', { name: '캘린더' })).not.toBeInTheDocument();

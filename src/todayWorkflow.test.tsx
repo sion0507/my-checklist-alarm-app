@@ -10,6 +10,15 @@ describe('Today local task workflow', () => {
     await clearTaskStoreForTests();
   });
 
+  it('keeps the page locked while assigning internal scrolling to the Today content region', async () => {
+    render(<App />);
+
+    const activePanel = await screen.findByLabelText('활성 탭 화면');
+    expect(activePanel).toHaveAttribute('data-active-tab', 'today');
+    expect(activePanel).toHaveAttribute('data-scroll-mode', 'internal');
+    expect(activePanel.querySelector('.today-panel')).toBeInTheDocument();
+  });
+
   it('quick-add creates a task for today and persists it after remount', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App />);
