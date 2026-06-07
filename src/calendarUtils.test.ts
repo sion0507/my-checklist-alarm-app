@@ -71,6 +71,12 @@ describe('calendar month projection', () => {
     }
   });
 
+  it('keeps unsupported future-year fillers unmarked when the UI is capped to the holiday table range', () => {
+    const december = getCalendarMonthDays(2032, 11, [], '2032-12-01');
+
+    expect(december.days.find((day) => day.date === '2033-01-01')).toMatchObject({ marker: undefined, markerLabel: undefined });
+  });
+
   it('keeps personal anniversary marker distinct from Korean public holidays', () => {
     const february = getCalendarMonthDays(2026, 1, [], '2026-02-01');
 

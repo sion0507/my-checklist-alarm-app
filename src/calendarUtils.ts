@@ -136,7 +136,19 @@ const specialKoreanHolidays: Record<string, CalendarDay['markerLabel']> = {
   '2032-12-27': '기독탄신일 대체공휴일',
 };
 
+const supportedKoreanHolidayYears = Object.keys(lunarKoreanHolidaysByYear).map(Number);
+
+export const supportedKoreanHolidayYearRange = {
+  start: Math.min(...supportedKoreanHolidayYears),
+  end: Math.max(...supportedKoreanHolidayYears),
+} as const;
+
 function getKoreanHolidayLabel(dateKey: string) {
+  const year = Number(dateKey.slice(0, 4));
+  if (year < supportedKoreanHolidayYearRange.start || year > supportedKoreanHolidayYearRange.end) {
+    return undefined;
+  }
+
   const fixedLabel = fixedKoreanHolidays[dateKey.slice(5)];
   const lunarLabel = lunarKoreanHolidaysByYear[Number(dateKey.slice(0, 4))]?.find((holiday) => holiday.date === dateKey)?.label;
   const specialLabel = specialKoreanHolidays[dateKey];

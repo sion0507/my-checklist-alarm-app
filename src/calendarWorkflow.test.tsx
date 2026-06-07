@@ -69,7 +69,7 @@ describe('Calendar month view workflow', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '2026-06-12 일정' })).not.toBeInTheDocument());
   });
 
-  it('limits calendar year selection and navigation to 2026 or later', async () => {
+  it('limits calendar year selection and navigation to the supported Korean holiday data range', async () => {
     const user = userEvent.setup();
     render(<App initialCalendarDate={new Date(2026, 0, 1)} />);
     await user.click(screen.getByRole('tab', { name: /캘린더/ }));
@@ -80,5 +80,13 @@ describe('Calendar month view workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /2025-12-31/ }));
     expect(screen.queryByRole('dialog', { name: '2025-12-31 일정' })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('연도 선택'), { target: { value: '2032' } });
+    fireEvent.change(screen.getByLabelText('월 선택'), { target: { value: '11' } });
+
+    expect(screen.getByLabelText('연도 선택')).toHaveValue('2032');
+    expect(screen.getByLabelText('연도 선택')).not.toHaveTextContent('2033');
+    fireEvent.click(screen.getByRole('button', { name: /2033-01-01/ }));
+    expect(screen.queryByRole('dialog', { name: '2033-01-01 일정' })).not.toBeInTheDocument();
   });
 });
