@@ -234,7 +234,8 @@ h1 {
   padding: 0;
 }
 
-.content-card[data-active-tab='calendar'][data-scroll-mode='internal'] {
+.content-card[data-active-tab='calendar'][data-scroll-mode='internal'],
+.content-card[data-active-tab='today'][data-scroll-mode='internal'] {
   overflow: hidden;
 }
 
@@ -246,7 +247,20 @@ h1 {
 }
 
 .today-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   margin-top: 20px;
+  min-height: 0;
+}
+
+.today-panel .task-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .quick-add label,
