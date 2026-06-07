@@ -39,6 +39,27 @@ describe('calendar month projection', () => {
     expect(month.days.find((day) => day.date === '2026-06-17')?.tasks.map((task) => task.id)).toEqual(['weekly']);
   });
 
+  it('marks Korean public holidays, substitutes, lunar holidays, and election days with Korean labels', () => {
+    const february = getCalendarMonthDays(2026, 1, [], '2026-02-01');
+    expect(february.days.find((day) => day.date === '2026-02-16')).toMatchObject({ marker: 'holiday', markerLabel: '설날 전날' });
+    expect(february.days.find((day) => day.date === '2026-02-17')).toMatchObject({ marker: 'holiday', markerLabel: '설날' });
+    expect(february.days.find((day) => day.date === '2026-02-18')).toMatchObject({ marker: 'holiday', markerLabel: '설날 다음날' });
+
+    const march = getCalendarMonthDays(2026, 2, [], '2026-03-01');
+    expect(march.days.find((day) => day.date === '2026-03-01')).toMatchObject({ marker: 'holiday', markerLabel: '삼일절' });
+    expect(march.days.find((day) => day.date === '2026-03-02')).toMatchObject({ marker: 'holiday', markerLabel: '삼일절 대체공휴일' });
+
+    const june = getCalendarMonthDays(2026, 5, [], '2026-06-01');
+    expect(june.days.find((day) => day.date === '2026-06-03')).toMatchObject({ marker: 'holiday', markerLabel: '지방선거일' });
+    expect(june.days.find((day) => day.date === '2026-06-04')?.marker).toBeUndefined();
+  });
+
+  it('keeps personal anniversary marker distinct from Korean public holidays', () => {
+    const february = getCalendarMonthDays(2026, 1, [], '2026-02-01');
+
+    expect(february.days.find((day) => day.date === '2026-02-14')).toMatchObject({ marker: 'anniversary', markerLabel: 'Anniversary' });
+  });
+
   it('limits visible task pills and reports overflow count', () => {
     const tasks = [
       makeTask({ id: 'one' }),
