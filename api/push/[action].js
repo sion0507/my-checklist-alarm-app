@@ -173,6 +173,12 @@ function defaultBody(kind) {
   return '예약된 할 일 시간입니다.';
 }
 
+const DAILY_NOTIFICATION_DELIVERY_WINDOW_MILLIS = 15 * 60 * 1000;
+
+function isDailyNotificationKind(kind) {
+  return kind === 'morning' || kind === 'evening';
+}
+
 function getTimeZoneOffsetMillis(date, timeZone) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -291,6 +297,7 @@ async function replaceScheduledJobs({ endpoint, jobs }) {
   for (const job of jobs) {
     const key = jobKey(endpoint, job.jobId);
     const previous = await getJob(key);
+    const nextState = previous?.state === 'completed' ? 'completed' : 'scheduled';
     await setJob(key, {
       endpoint,
       jobId: job.jobId,
@@ -302,11 +309,12 @@ async function replaceScheduledJobs({ endpoint, jobs }) {
         taskId: job.metadata.taskId,
         occurrenceDate: job.metadata.occurrenceDate,
       },
-      state: 'scheduled',
+      state: nextState,
       attempts: previous?.attempts ?? 0,
       createdAt: previous?.createdAt ?? timestamp,
       updatedAt: timestamp,
       lastAttemptAt: previous?.lastAttemptAt,
+      completedAt: previous?.completedAt,
       lastStatus: previous?.lastStatus,
       lastError: previous?.lastError,
     });
@@ -316,8 +324,9 @@ async function replaceScheduledJobs({ endpoint, jobs }) {
 }
 
 async function sendDueScheduledNotifications({ limit = 25 } = {}) {
-  const timestamp = new Date().toISOString();
-  const currentTime = Date.now();
+  const now = new Date();
+  const timestamp = now.toISOString();
+  const currentTime = now.getTime();
   const records = [];
   for (const key of await listAllJobKeys()) {
     const record = await getJob(key);
@@ -325,9 +334,21 @@ async function sendDueScheduledNotifications({ limit = 25 } = {}) {
       continue;
     }
     const subscription = await getSubscription(record.endpoint);
-    if (scheduledForMillis(record.scheduledFor, subscription?.metadata?.timezone) <= currentTime) {
-      records.push({ key, record });
+    const scheduledTime = scheduledForMillis(record.scheduledFor, subscription?.metadata?.timezone);
+    if (scheduledTime > currentTime) {
+      continue;
     }
+    if (isDailyNotificationKind(record.kind) && currentTime > scheduledTime + DAILY_NOTIFICATION_DELIVERY_WINDOW_MILLIS) {
+      await setJob(key, {
+        ...record,
+        state: 'cancelled',
+        updatedAt: timestamp,
+        cancelledAt: timestamp,
+        lastError: 'Missed configured notification window',
+      });
+      continue;
+    }
+    records.push({ key, record });
   }
   records.sort((a, b) => {
     const first = a.record.scheduledFor.localeCompare(b.record.scheduledFor);

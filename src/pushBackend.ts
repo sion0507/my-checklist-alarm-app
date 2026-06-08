@@ -103,6 +103,12 @@ function defaultBody(kind: ScheduledNotificationRecord['kind']) {
   return '예약된 할 일 시간입니다.';
 }
 
+const DAILY_NOTIFICATION_DELIVERY_WINDOW_MILLIS = 15 * 60 * 1000;
+
+function isDailyNotificationKind(kind: ScheduledNotificationRecord['kind']) {
+  return kind === 'morning' || kind === 'evening';
+}
+
 function getTimeZoneOffsetMillis(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -237,6 +243,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
       for (const job of jobs) {
         const key = scheduledJobKey(endpoint, job.jobId);
         const previous = scheduledJobs.get(key);
+        const nextState = previous?.state === 'completed' ? 'completed' : 'scheduled';
         scheduledJobs.set(key, {
           endpoint,
           jobId: job.jobId,
@@ -248,11 +255,12 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
             taskId: job.metadata.taskId,
             occurrenceDate: job.metadata.occurrenceDate,
           },
-          state: 'scheduled',
+          state: nextState,
           attempts: previous?.attempts ?? 0,
           createdAt: previous?.createdAt ?? timestamp,
           updatedAt: timestamp,
           lastAttemptAt: previous?.lastAttemptAt,
+          completedAt: previous?.completedAt,
           lastStatus: previous?.lastStatus,
           lastError: previous?.lastError,
         });
@@ -275,20 +283,35 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
         throw new Error('Web Push sender is not configured');
       }
 
-      const timestamp = now().toISOString();
-      const currentTime = now().getTime();
-      const dueJobs = [...scheduledJobs.values()]
-        .filter((record) => {
-          if (record.state !== 'scheduled') {
-            return false;
-          }
-          const timezone = subscriptions.get(record.endpoint)?.metadata.timezone;
-          return scheduledForMillis(record.scheduledFor, timezone) <= currentTime;
-        })
-        .sort((a, b) => {
-          const first = a.scheduledFor.localeCompare(b.scheduledFor);
-          return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
-        });
+      const currentDate = now();
+      const timestamp = currentDate.toISOString();
+      const currentTime = currentDate.getTime();
+      const dueJobs: ScheduledNotificationRecord[] = [];
+      for (const record of scheduledJobs.values()) {
+        if (record.state !== 'scheduled') {
+          continue;
+        }
+        const timezone = subscriptions.get(record.endpoint)?.metadata.timezone;
+        const scheduledTime = scheduledForMillis(record.scheduledFor, timezone);
+        if (scheduledTime > currentTime) {
+          continue;
+        }
+        if (isDailyNotificationKind(record.kind) && currentTime > scheduledTime + DAILY_NOTIFICATION_DELIVERY_WINDOW_MILLIS) {
+          scheduledJobs.set(scheduledJobKey(record.endpoint, record.jobId), {
+            ...record,
+            state: 'cancelled',
+            updatedAt: timestamp,
+            cancelledAt: timestamp,
+            lastError: 'Missed configured notification window',
+          });
+          continue;
+        }
+        dueJobs.push(record);
+      }
+      dueJobs.sort((a, b) => {
+        const first = a.scheduledFor.localeCompare(b.scheduledFor);
+        return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
+      });
       const selectedJobs = dueJobs.slice(0, limit);
       let sent = 0;
       let failed = 0;
