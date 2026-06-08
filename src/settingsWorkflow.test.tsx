@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -122,6 +122,31 @@ describe('Settings reminders workflow', () => {
     await user.click(screen.getByRole('tab', { name: '설정' }));
     expect(screen.getByLabelText('테마 색상')).toHaveValue('rose');
     expect(screen.getByLabelText('화면 모드')).toHaveValue('dark');
+  });
+
+  it('creates a recurring task rule from Settings and projects it into Today and Calendar', async () => {
+    stubNotification('default');
+    const user = userEvent.setup();
+
+    render(<App initialCalendarDate={new Date(2026, 5, 1)} />);
+    await user.click(screen.getByRole('tab', { name: '설정' }));
+
+    expect(screen.getByRole('region', { name: '반복 할 일 설정' })).toBeInTheDocument();
+    await user.type(screen.getByLabelText('반복 할 일 제목'), '매일 스트레칭');
+    fireEvent.change(screen.getByLabelText('반복 시작 날짜'), { target: { value: '2026-06-01' } });
+    fireEvent.change(screen.getByLabelText('반복 할 일 시간'), { target: { value: '07:00' } });
+    await user.selectOptions(screen.getByLabelText('반복 주기'), 'daily');
+    await user.click(screen.getByRole('button', { name: '반복 할 일 추가' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('매일 스트레칭 반복 할 일을 추가했습니다.');
+    await user.click(screen.getByRole('tab', { name: '오늘' }));
+    expect(await screen.findByText('매일 스트레칭')).toBeInTheDocument();
+    expect(screen.getByText('07:00')).toBeInTheDocument();
+    expect(screen.getByText('매일')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: '캘린더' }));
+    const june2 = screen.getByRole('button', { name: /2026-06-02/ });
+    expect(await within(june2).findByText('07:00 매일 스트레칭')).toBeInTheDocument();
   });
 
   it('uses the backend push test notification flow when permission is granted', async () => {
