@@ -1,4 +1,4 @@
-import { type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addMonths,
   formatDateKey,
@@ -407,7 +407,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }, [reminderSettings]);
 
   useEffect(() => {
-    if (!isSelectedDateModalOpen) {
+    if (!isSelectedDateModalOpen || editingTask) {
       return undefined;
     }
     selectedDateModalCloseButtonRef.current?.focus();
@@ -418,7 +418,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSelectedDateModalOpen]);
+  }, [editingTask, isSelectedDateModalOpen]);
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
   const todayDate = todayPanelDate;
@@ -1478,12 +1478,25 @@ function TaskDetailModal({
   onDeleteRecurringRule,
   onClose,
 }: TaskDetailModalProps) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, [task.id, task.occurrenceDate]);
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      onClose();
+    }
+  }
+
   return (
-    <div aria-modal="true" className="modal-backdrop" role="dialog" aria-label={`${task.title} 상세`}>
+    <div aria-modal="true" className="modal-backdrop" onKeyDown={handleKeyDown} role="dialog" aria-label={`${task.title} 상세`}>
       <form className="task-modal" onSubmit={onSave}>
         <div className="modal-header">
           <h2>할 일 상세</h2>
-          <button aria-label="닫기" onClick={onClose} type="button">
+          <button ref={closeButtonRef} aria-label="닫기" onClick={onClose} type="button">
             ×
           </button>
         </div>
