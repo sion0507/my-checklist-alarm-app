@@ -733,7 +733,8 @@ h1 {
   color: var(--theme-muted);
 }
 
-.calendar-day.weekend .day-number {
+.calendar-day.weekend .day-number,
+.calendar-day.marker-holiday .day-number {
   color: #ef4444;
 }
 

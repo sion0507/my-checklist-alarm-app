@@ -27,6 +27,10 @@ describe('theme contrast CSS', () => {
     expect(cssRule('.marker-anniversary .date-marker')).toContain('color: var(--theme-anniversary-text);');
   });
 
+  it('colors public holiday day numbers red even when they fall on weekdays', () => {
+    expect(cssRule('.calendar-day.marker-holiday .day-number')).toContain('color: #ef4444;');
+  });
+
   it('uses theme tokens for remaining card and status backgrounds instead of hardcoded light surfaces', () => {
     const themedSelectors = [
       '.morning-check-in',
