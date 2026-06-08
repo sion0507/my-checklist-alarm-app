@@ -61,6 +61,24 @@ describe('Calendar month view workflow', () => {
     expect(within(taskDetailDialog).getByRole('button', { name: '닫기' })).toHaveFocus();
   });
 
+  it('routes Escape to the topmost task detail before the selected-date modal', async () => {
+    await createTask({ title: 'Escape 라우팅 할 일', date: '2026-06-12', time: '', recurrence: 'none', memo: '', notify: false });
+    render(<App initialCalendarDate={new Date(2026, 5, 1)} />);
+    fireEvent.click(screen.getByRole('tab', { name: /캘린더/ }));
+
+    const dateButton = screen.getByRole('button', { name: /2026-06-12/ });
+    await waitFor(() => expect(within(dateButton).getByText('Escape 라우팅 할 일')).toBeInTheDocument());
+    fireEvent.click(dateButton);
+    const selectedDateDialog = await screen.findByRole('dialog', { name: '2026-06-12 일정' });
+    fireEvent.click(within(selectedDateDialog).getByRole('button', { name: 'Escape 라우팅 할 일' }));
+    const taskDetailDialog = await screen.findByRole('dialog', { name: /Escape 라우팅 할 일 상세/ });
+
+    fireEvent.keyDown(within(taskDetailDialog).getByRole('button', { name: '닫기' }), { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Escape 라우팅 할 일 상세/ })).not.toBeInTheDocument());
+    expect(screen.getByRole('dialog', { name: '2026-06-12 일정' })).toBeInTheDocument();
+  });
+
   it('opens selected-date tasks in a dismissible modal and keeps add flow tied to that date', async () => {
     await createTask({ title: '선택 날짜 기존 할 일', date: '2026-06-12', time: '', recurrence: 'none', memo: '', notify: false });
     render(<App initialCalendarDate={new Date(2026, 5, 1)} />);
