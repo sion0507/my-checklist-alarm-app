@@ -18,6 +18,17 @@ describe('theme contrast CSS', () => {
     expect(darkTheme).toContain('--theme-warning-surface: #431f13;');
     expect(darkTheme).toContain('--theme-info-surface: #12364a;');
     expect(darkTheme).toContain('--theme-success-surface: #14351f;');
+    expect(darkTheme).toContain('--theme-holiday-text: #facc15;');
+    expect(darkTheme).toContain('--theme-anniversary-text: #f9a8d4;');
+  });
+
+  it('uses theme tokens for holiday and anniversary marker colors', () => {
+    expect(cssRule('.date-marker')).toContain('color: var(--theme-holiday-text);');
+    expect(cssRule('.marker-anniversary .date-marker')).toContain('color: var(--theme-anniversary-text);');
+  });
+
+  it('colors public holiday day numbers red even when they fall on weekdays', () => {
+    expect(cssRule('.calendar-day.marker-holiday .day-number')).toContain('color: #ef4444;');
   });
 
   it('uses theme tokens for remaining card and status backgrounds instead of hardcoded light surfaces', () => {

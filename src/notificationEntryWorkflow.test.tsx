@@ -29,7 +29,7 @@ describe('Notification task entry workflow', () => {
 
     render(<App initialCalendarDate={new Date('2026-06-01T12:00:00')} />);
 
-    expect(await screen.findByRole('button', { name: '2026-06-03' })).toHaveClass('selected');
+    expect(await screen.findByRole('button', { name: /^2026-06-03/ })).toHaveClass('selected');
     const entry = screen.getByRole('region', { name: '알림에서 열린 할 일' });
     expect(await within(entry).findByText('09:30 약 먹기')).toBeInTheDocument();
     expect(within(entry).getByRole('button', { name: '약 먹기 완료' })).toBeInTheDocument();

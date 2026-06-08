@@ -1,5 +1,13 @@
 import { type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { addMonths, formatDateKey, getCalendarMonthDays, getVisibleTaskPills, weekdayHeaders, type CalendarMonth } from './calendarUtils';
+import {
+  addMonths,
+  formatDateKey,
+  getCalendarMonthDays,
+  getVisibleTaskPills,
+  supportedKoreanHolidayYearRange,
+  weekdayHeaders,
+  type CalendarMonth,
+} from './calendarUtils';
 import { buildSevenDayNotificationSchedule } from './notificationPlanner';
 import { enablePushSubscription, sendBackendTestPush } from './pushClient';
 import { syncUpcomingNotificationSchedule } from './scheduleSyncClient';
@@ -72,8 +80,34 @@ const morningCheckInStateKey = 'checklist-alarm:morning-check-in-state';
 const eveningReviewStateKey = 'checklist-alarm:evening-review-state';
 const themeColorKey = 'checklist-alarm:theme-color';
 const themeModeKey = 'checklist-alarm:theme-mode';
-const minimumCalendarYear = 2026;
+const minimumCalendarYear = supportedKoreanHolidayYearRange.start;
+const maximumCalendarYear = supportedKoreanHolidayYearRange.end;
 const minimumCalendarDateKey = `${minimumCalendarYear}-01-01`;
+const maximumCalendarDateKey = `${maximumCalendarYear}-12-31`;
+
+function clampCalendarMonthDate(date: Date) {
+  if (date.getFullYear() < minimumCalendarYear) {
+    return new Date(minimumCalendarYear, 0, 1);
+  }
+  if (date.getFullYear() > maximumCalendarYear) {
+    return new Date(maximumCalendarYear, 11, 1);
+  }
+  return date;
+}
+
+function clampCalendarDateKey(dateKey: string) {
+  if (dateKey < minimumCalendarDateKey) {
+    return minimumCalendarDateKey;
+  }
+  if (dateKey > maximumCalendarDateKey) {
+    return maximumCalendarDateKey;
+  }
+  return dateKey;
+}
+
+function isSupportedCalendarDateKey(dateKey: string) {
+  return dateKey >= minimumCalendarDateKey && dateKey <= maximumCalendarDateKey;
+}
 
 const defaultReminderSettings: ReminderSettings = {
   morningTime: '08:00',
@@ -308,13 +342,12 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [isSelectedDateModalOpen, setIsSelectedDateModalOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => {
     const initialDate = initialNotificationEntry?.date ? new Date(`${initialNotificationEntry.date}T00:00:00`) : initialCalendarDate;
-    const clampedYear = Math.max(initialDate.getFullYear(), minimumCalendarYear);
-    const clampedMonth = initialDate.getFullYear() < minimumCalendarYear ? 0 : initialDate.getMonth();
-    return new Date(clampedYear, clampedMonth, 1);
+    const clampedDate = clampCalendarMonthDate(initialDate);
+    return new Date(clampedDate.getFullYear(), clampedDate.getMonth(), 1);
   });
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => {
     const initialSelectedDate = initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate);
-    return initialSelectedDate < minimumCalendarDateKey ? minimumCalendarDateKey : initialSelectedDate;
+    return clampCalendarDateKey(initialSelectedDate);
   });
   const [notificationMoveDate, setNotificationMoveDate] = useState(() => initialNotificationEntry?.date ?? formatDateKey(initialCalendarDate));
   const [reminderSettings, setReminderSettings] = useState(loadReminderSettings);
@@ -408,7 +441,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     : null;
 
   function selectCalendarMonth(date: Date) {
-    const safeDate = date.getFullYear() < minimumCalendarYear ? new Date(minimumCalendarYear, 0, 1) : date;
+    const safeDate = clampCalendarMonthDate(date);
     const firstDayOfMonth = new Date(safeDate.getFullYear(), safeDate.getMonth(), 1);
     setCalendarDate(firstDayOfMonth);
     setSelectedCalendarDate(formatDateKey(firstDayOfMonth));
@@ -423,6 +456,11 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
         setIsSelectedDateModalOpen(false);
         return current;
       }
+      if (nextMonth.getFullYear() > maximumCalendarYear) {
+        setSelectedCalendarDate(maximumCalendarDateKey);
+        setIsSelectedDateModalOpen(false);
+        return current;
+      }
       setSelectedCalendarDate(formatDateKey(nextMonth));
       setIsSelectedDateModalOpen(false);
       return nextMonth;
@@ -430,7 +468,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   function jumpCalendarMonth(year: number, monthIndex: number) {
-    selectCalendarMonth(new Date(Math.max(year, minimumCalendarYear), year < minimumCalendarYear ? 0 : monthIndex, 1));
+    selectCalendarMonth(new Date(year, monthIndex, 1));
   }
 
   function handleCalendarTouchEnd(x: number) {
@@ -473,7 +511,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   async function handleSelectCalendarDate(date: string, returnFocusTarget?: HTMLElement) {
-    if (date < minimumCalendarDateKey) {
+    if (!isSupportedCalendarDateKey(date)) {
       return;
     }
     selectedDateModalReturnFocusRef.current = returnFocusTarget ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -1151,8 +1189,9 @@ function CalendarPanel({
   onTouchStart,
   onTouchEnd,
 }: CalendarPanelProps) {
-  const firstYear = Math.max(minimumCalendarYear, month.year - 3);
-  const years = Array.from({ length: 7 }, (_, index) => firstYear + index);
+  const visibleYearCount = Math.min(7, maximumCalendarYear - minimumCalendarYear + 1);
+  const firstYear = Math.min(Math.max(minimumCalendarYear, month.year - 3), maximumCalendarYear - visibleYearCount + 1);
+  const years = Array.from({ length: visibleYearCount }, (_, index) => firstYear + index);
 
   return (
     <div className="calendar-panel">
