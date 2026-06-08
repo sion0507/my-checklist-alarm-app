@@ -987,7 +987,7 @@ h1 {
   justify-content: center;
   padding: 18px;
   position: fixed;
-  z-index: 10;
+  z-index: 30;
 }
 
 .task-modal {

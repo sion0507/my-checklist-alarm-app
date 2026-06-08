@@ -1,9 +1,18 @@
 import 'fake-indexeddb/auto';
+import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
 import { clearTaskStoreForTests, createTask, listTasks } from './taskStore';
+
+const styles = readFileSync('src/styles.css', 'utf8');
+
+function zIndexForClass(className: string) {
+  const matches = [...styles.matchAll(new RegExp(`\\.${className}\\s*\\{[^}]*z-index:\\s*(\\d+)`, 'gs'))];
+  const match = matches.at(-1);
+  return match ? Number(match[1]) : NaN;
+}
 
 describe('Calendar month view workflow', () => {
   beforeEach(async () => {
@@ -34,6 +43,22 @@ describe('Calendar month view workflow', () => {
 
     await user.click(within(june10).getByRole('button', { name: /병원 예약 아주 긴 제목입니다 상세 열기/ }));
     expect(await screen.findByRole('dialog', { name: /병원 예약 아주 긴 제목입니다 상세/ })).toBeInTheDocument();
+  });
+
+  it('opens task detail above the selected-date modal and routes focus to the detail panel', async () => {
+    await createTask({ title: '선택 날짜 상세 할 일', date: '2026-06-12', time: '', recurrence: 'none', memo: '', notify: false });
+    render(<App initialCalendarDate={new Date(2026, 5, 1)} />);
+    fireEvent.click(screen.getByRole('tab', { name: /캘린더/ }));
+
+    const dateButton = screen.getByRole('button', { name: /2026-06-12/ });
+    await waitFor(() => expect(within(dateButton).getByText('선택 날짜 상세 할 일')).toBeInTheDocument());
+    fireEvent.click(dateButton);
+    const selectedDateDialog = await screen.findByRole('dialog', { name: '2026-06-12 일정' });
+    fireEvent.click(within(selectedDateDialog).getByRole('button', { name: '선택 날짜 상세 할 일' }));
+
+    const taskDetailDialog = await screen.findByRole('dialog', { name: /선택 날짜 상세 할 일 상세/ });
+    expect(zIndexForClass('modal-backdrop')).toBeGreaterThan(zIndexForClass('selected-date-modal-layer'));
+    expect(within(taskDetailDialog).getByRole('button', { name: '닫기' })).toHaveFocus();
   });
 
   it('opens selected-date tasks in a dismissible modal and keeps add flow tied to that date', async () => {

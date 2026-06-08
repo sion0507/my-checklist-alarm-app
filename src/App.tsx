@@ -1478,12 +1478,18 @@ function TaskDetailModal({
   onDeleteRecurringRule,
   onClose,
 }: TaskDetailModalProps) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, [task.id, task.occurrenceDate]);
+
   return (
     <div aria-modal="true" className="modal-backdrop" role="dialog" aria-label={`${task.title} 상세`}>
       <form className="task-modal" onSubmit={onSave}>
         <div className="modal-header">
           <h2>할 일 상세</h2>
-          <button aria-label="닫기" onClick={onClose} type="button">
+          <button ref={closeButtonRef} aria-label="닫기" onClick={onClose} type="button">
             ×
           </button>
         </div>
