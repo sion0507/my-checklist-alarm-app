@@ -358,6 +358,12 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<TaskOccurrence | null>(null);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
+  const [settingsRecurringForm, setSettingsRecurringForm] = useState<TaskFormState>(() => ({
+    ...emptyTaskForm(),
+    date: formatDateKey(initialCalendarDate),
+    recurrence: 'daily',
+  }));
+  const [settingsRecurringStatus, setSettingsRecurringStatus] = useState('');
   const didInitializeReminderSettings = useRef(false);
   const selectedDateModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const selectedDateModalReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -755,6 +761,29 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     }
   }
 
+  async function handleCreateSettingsRecurringTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = settingsRecurringForm.title.trim();
+    if (!title || !settingsRecurringForm.date || settingsRecurringForm.recurrence === 'none') {
+      return;
+    }
+
+    await createTask({
+      ...settingsRecurringForm,
+      title,
+      recurrence: settingsRecurringForm.recurrence,
+    });
+    setSettingsRecurringForm((current) => ({
+      ...current,
+      title: '',
+      time: '',
+      memo: '',
+      notify: false,
+    }));
+    setSettingsRecurringStatus(`${title} 반복 할 일을 추가했습니다.`);
+    await refreshTasks();
+  }
+
   return (
     <main className="app-shell" data-theme-color={themeColor} data-theme-mode={themeMode} aria-label="Checklist Alarm PWA">
       <section className="phone-frame">
@@ -820,10 +849,14 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
             <SettingsPanel
               notificationPermission={notificationPermission}
               onReminderSettingsChange={setReminderSettings}
+              onSettingsRecurringFormChange={setSettingsRecurringForm}
+              onSettingsRecurringSubmit={handleCreateSettingsRecurringTask}
               onTestNotification={() => void handleTestNotification()}
               onThemeColorChange={handleThemeColorChange}
               onThemeModeChange={handleThemeModeChange}
               reminderSettings={reminderSettings}
+              settingsRecurringForm={settingsRecurringForm}
+              settingsRecurringStatus={settingsRecurringStatus}
               testNotificationMessage={testNotificationMessage}
               themeColor={themeColor}
               themeMode={themeMode}
@@ -1371,9 +1404,13 @@ type SettingsPanelProps = {
   testNotificationMessage: string;
   themeColor: ThemeColor;
   themeMode: ThemeMode;
+  settingsRecurringForm: TaskFormState;
+  settingsRecurringStatus: string;
   onReminderSettingsChange: (settings: ReminderSettings) => void;
   onThemeColorChange: (themeColor: ThemeColor) => void;
   onThemeModeChange: (themeMode: ThemeMode) => void;
+  onSettingsRecurringFormChange: (form: TaskFormState) => void;
+  onSettingsRecurringSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTestNotification: () => void;
 };
 
@@ -1383,9 +1420,13 @@ function SettingsPanel({
   testNotificationMessage,
   themeColor,
   themeMode,
+  settingsRecurringForm,
+  settingsRecurringStatus,
   onReminderSettingsChange,
   onThemeColorChange,
   onThemeModeChange,
+  onSettingsRecurringFormChange,
+  onSettingsRecurringSubmit,
   onTestNotification,
 }: SettingsPanelProps) {
   return (
@@ -1408,6 +1449,73 @@ function SettingsPanel({
             onChange={(event) => onReminderSettingsChange({ ...reminderSettings, eveningTime: event.target.value })}
           />
         </label>
+      </section>
+
+      <section className="settings-card" aria-label="반복 할 일 설정">
+        <h2>반복 할 일</h2>
+        <p className="settings-help">매일/매주/매월 반복되는 가벼운 할 일을 Settings에서 바로 추가합니다.</p>
+        <form className="settings-recurring-form" onSubmit={onSettingsRecurringSubmit}>
+          <label>
+            반복 할 일 제목
+            <input
+              required
+              value={settingsRecurringForm.title}
+              onChange={(event) => onSettingsRecurringFormChange({ ...settingsRecurringForm, title: event.target.value })}
+              placeholder="예: 스트레칭"
+            />
+          </label>
+          <label>
+            반복 시작 날짜
+            <input
+              required
+              type="date"
+              value={settingsRecurringForm.date}
+              onChange={(event) => onSettingsRecurringFormChange({ ...settingsRecurringForm, date: event.target.value })}
+            />
+          </label>
+          <label>
+            반복 할 일 시간
+            <input
+              type="time"
+              value={settingsRecurringForm.time}
+              onChange={(event) => onSettingsRecurringFormChange({ ...settingsRecurringForm, time: event.target.value })}
+            />
+          </label>
+          <label>
+            반복 주기
+            <select
+              value={settingsRecurringForm.recurrence}
+              onChange={(event) => onSettingsRecurringFormChange({ ...settingsRecurringForm, recurrence: event.target.value as Recurrence })}
+            >
+              {(['daily', 'weekly', 'monthly'] as Recurrence[]).map((value) => (
+                <option key={value} value={value}>
+                  {recurrenceLabels[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            반복 할 일 메모
+            <textarea
+              value={settingsRecurringForm.memo}
+              onChange={(event) => onSettingsRecurringFormChange({ ...settingsRecurringForm, memo: event.target.value })}
+            />
+          </label>
+          <label className="checkbox-row">
+            <input
+              checked={settingsRecurringForm.notify}
+              onChange={(event) => onSettingsRecurringFormChange({ ...settingsRecurringForm, notify: event.target.checked })}
+              type="checkbox"
+            />
+            알림 켜기
+          </label>
+          <button type="submit">반복 할 일 추가</button>
+        </form>
+        {settingsRecurringStatus ? (
+          <p className="notification-feedback" role="status">
+            {settingsRecurringStatus}
+          </p>
+        ) : null}
       </section>
 
       <section className="settings-card" aria-label="테마 설정">
