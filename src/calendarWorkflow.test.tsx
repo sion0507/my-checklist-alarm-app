@@ -132,4 +132,89 @@ describe('Calendar month view workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /2033-01-01/ }));
     expect(screen.queryByRole('dialog', { name: '2033-01-01 일정' })).not.toBeInTheDocument();
   });
+
+  it('creates calendar tasks through image-style sheet tabs for basic, range, multiple, and weekly repeat flows', async () => {
+    const user = userEvent.setup();
+    render(<App initialCalendarDate={new Date(2026, 5, 9)} />);
+    await user.click(screen.getByRole('tab', { name: /캘린더/ }));
+    await user.click(screen.getByRole('button', { name: '캘린더에서 할 일 만들기' }));
+
+    const sheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
+    expect(sheet).toHaveAttribute('data-calendar-create-sheet', 'true');
+    expect(within(sheet).getByTestId('calendar-sheet-handle')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: '캘린더 생성 취소' })).toHaveClass('sheet-cancel-button');
+    expect(within(sheet).getByRole('button', { name: '캘린더 생성 저장' })).toHaveClass('sheet-save-button');
+    expect(within(sheet).getByRole('tab', { name: '일반' })).toHaveClass('active');
+
+    fireEvent.change(within(sheet).getByLabelText('캘린더 생성 제목'), { target: { value: '일반 생성' } });
+    await user.click(within(sheet).getByRole('button', { name: /2026-06-09/ }));
+    await user.click(within(sheet).getByRole('button', { name: '캘린더 생성 저장' }));
+
+    await waitFor(async () => expect(await listTasks()).toEqual(expect.arrayContaining([expect.objectContaining({ title: '일반 생성', date: '2026-06-09', recurrence: 'none' })])));
+    expect(await within(screen.getByRole('button', { name: /2026-06-09/ })).findByText('일반 생성')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '캘린더에서 할 일 만들기' }));
+    const rangeSheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
+    await user.click(within(rangeSheet).getByRole('tab', { name: '기간' }));
+    fireEvent.change(within(rangeSheet).getByLabelText('캘린더 생성 제목'), { target: { value: '기간 생성' } });
+    await user.click(within(rangeSheet).getByRole('button', { name: /2026-06-10/ }));
+    await user.click(within(rangeSheet).getByRole('button', { name: /2026-06-12/ }));
+    expect(within(rangeSheet).getByRole('button', { name: /2026-06-10/ })).toHaveClass('range-endpoint');
+    expect(within(rangeSheet).getByRole('button', { name: /2026-06-11/ })).toHaveClass('in-range');
+    await user.click(within(rangeSheet).getByRole('button', { name: '캘린더 생성 저장' }));
+
+    await waitFor(async () => {
+      const tasks = await listTasks();
+      expect(tasks).toEqual(expect.arrayContaining([
+        expect.objectContaining({ title: '기간 생성', date: '2026-06-10' }),
+        expect.objectContaining({ title: '기간 생성', date: '2026-06-11' }),
+        expect.objectContaining({ title: '기간 생성', date: '2026-06-12' }),
+      ]));
+    });
+
+    await user.click(screen.getByRole('button', { name: '캘린더에서 할 일 만들기' }));
+    const multiSheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
+    await user.click(within(multiSheet).getByRole('tab', { name: '다중' }));
+    fireEvent.change(within(multiSheet).getByLabelText('캘린더 생성 제목'), { target: { value: '다중 생성' } });
+    await user.click(within(multiSheet).getByRole('button', { name: /2026-06-09/ }));
+    await user.click(within(multiSheet).getByRole('button', { name: /2026-06-11/ }));
+    await user.click(within(multiSheet).getByRole('button', { name: /2026-06-13/ }));
+    expect(within(multiSheet).getByRole('button', { name: /2026-06-11/ })).toHaveClass('multi-selected');
+    await user.click(within(multiSheet).getByRole('button', { name: '캘린더 생성 저장' }));
+
+    await user.click(screen.getByRole('button', { name: '캘린더에서 할 일 만들기' }));
+    const repeatSheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
+    await user.click(within(repeatSheet).getByRole('tab', { name: '반복' }));
+    expect(within(repeatSheet).getByLabelText('반복 유형')).toHaveValue('weekly');
+    fireEvent.change(within(repeatSheet).getByLabelText('캘린더 생성 제목'), { target: { value: '반복 생성' } });
+    await user.click(within(repeatSheet).getByRole('button', { name: '월요일 선택' }));
+    await user.click(within(repeatSheet).getByRole('button', { name: '수요일 선택' }));
+    expect(within(repeatSheet).getByRole('button', { name: '월요일 선택' })).toHaveClass('selected');
+    await user.click(within(repeatSheet).getByRole('button', { name: '캘린더 생성 저장' }));
+
+    await waitFor(async () => {
+      const tasks = await listTasks();
+      expect(tasks).toEqual(expect.arrayContaining([
+        expect.objectContaining({ title: '다중 생성', date: '2026-06-09' }),
+        expect.objectContaining({ title: '다중 생성', date: '2026-06-11' }),
+        expect.objectContaining({ title: '다중 생성', date: '2026-06-13' }),
+        expect.objectContaining({ title: '반복 생성', date: '2026-06-15', recurrence: 'weekly' }),
+        expect.objectContaining({ title: '반복 생성', date: '2026-06-17', recurrence: 'weekly' }),
+      ]));
+    });
+
+    await user.click(screen.getByRole('tab', { name: /오늘/ }));
+    expect(await screen.findByRole('checkbox', { name: '일반 생성 완료' })).toBeInTheDocument();
+  }, 30000);
+
+  it('keeps the calendar creation sheet visually aligned to the mobile reference', () => {
+    expect(styles).toMatch(/\.calendar-create-sheet\s*\{[^}]*border-radius:\s*36px 36px 0 0/s);
+    expect(styles).toMatch(/\.calendar-sheet-handle\s*\{[^}]*width:\s*56px/s);
+    expect(styles).toMatch(/\.sheet-cancel-button\s*\{[^}]*color:\s*#ef4444/s);
+    expect(styles).toMatch(/\.sheet-save-button\s*\{[^}]*color:\s*#7aa7f8/s);
+    expect(styles).toMatch(/\.calendar-create-tab\.active\s*\{[^}]*background:\s*#ffffff/s);
+    expect(styles).toMatch(/\.range-endpoint[^}]*\{[^}]*border-radius:\s*999px/s);
+    expect(styles).toMatch(/\.in-range[^}]*\{[^}]*background:\s*#dcecff/s);
+    expect(styles).toMatch(/\.repeat-weekday-pill\.selected\s*\{[^}]*border-radius:\s*999px/s);
+  });
 });

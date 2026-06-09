@@ -1,4 +1,4 @@
-export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
+export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export type TaskException = {
   completed?: boolean;
@@ -143,7 +143,11 @@ export function taskOccursOnDate(task: Task, date: string) {
 
   const start = parseLocalDate(task.date);
   const target = parseLocalDate(date);
-  return target.getDate() === start.getDate();
+  if (task.recurrence === 'monthly') {
+    return target.getDate() === start.getDate();
+  }
+
+  return target.getMonth() === start.getMonth() && target.getDate() === start.getDate();
 }
 
 function toOccurrence(task: Task, occurrenceDate: string, projectedDate: string, exception?: TaskException): TaskOccurrence {
