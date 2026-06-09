@@ -48,13 +48,14 @@ function scheduledAt(date: string, time: string) {
 }
 
 function dailyJob(kind: 'morning' | 'evening', date: string, time: string): ScheduledNotificationJob {
+  const path = kind === 'morning' ? `/?date=${date}&entry=${kind}&time=${encodeURIComponent(time)}` : `/?date=${date}&entry=${kind}`;
   return {
     jobId: `${kind}:${date}`,
     kind,
     scheduledFor: scheduledAt(date, time),
     metadata: {
       title: kind === 'morning' ? '아침 체크리스트 알림' : '저녁 체크리스트 리뷰',
-      path: `/?date=${date}&entry=${kind}`,
+      path,
     },
   };
 }

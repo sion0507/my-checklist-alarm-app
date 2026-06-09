@@ -148,6 +148,7 @@ type NotificationEntryState = {
 type DailyNotificationEntryState = {
   kind: 'morning' | 'evening';
   date: string;
+  time?: string;
 };
 
 type NotificationActionStatus = {
@@ -156,6 +157,10 @@ type NotificationActionStatus = {
 
 type MorningCheckInState = Record<string, 'done'>;
 type EveningReviewState = Record<string, string[]>;
+
+function morningCheckInInstanceKey(date: string, time: string) {
+  return `${date}:${time}`;
+}
 
 const notificationPermissionLabels: Record<NotificationPermissionView, string> = {
   default: '권한 요청 필요',
@@ -291,10 +296,11 @@ function loadDailyNotificationEntry(): DailyNotificationEntryState | null {
   const params = new URLSearchParams(window.location.search);
   const entry = params.get('entry');
   const date = params.get('date');
+  const time = params.get('time');
   if ((entry !== 'morning' && entry !== 'evening') || !date) {
     return null;
   }
-  return { kind: entry, date };
+  return { kind: entry, date, time: time && isTimeValue(time) ? time : undefined };
 }
 
 function notificationTaskKey(entry: NotificationEntryState | null) {
@@ -428,7 +434,12 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
   const todayTasks = useMemo(() => sortIncompleteFirst(tasks), [tasks]);
   const todayDate = todayPanelDate;
-  const showMorningCheckIn = morningCheckInState[todayDate] !== 'done' || initialDailyNotificationEntry?.kind === 'morning';
+  const isMorningNotificationEntry = initialDailyNotificationEntry?.kind === 'morning';
+  const morningCheckInTime = initialDailyNotificationEntry?.time ?? reminderSettings.morningTime;
+  const currentMorningCheckInKey = morningCheckInInstanceKey(todayDate, morningCheckInTime);
+  const isCurrentMorningCheckInDone =
+    morningCheckInState[currentMorningCheckInKey] === 'done' || (!isMorningNotificationEntry && morningCheckInState[todayDate] === 'done');
+  const showMorningCheckIn = !isCurrentMorningCheckInDone;
   const showEveningReview = isAfterReminderTime(initialCalendarDate, reminderSettings.eveningTime) || initialDailyNotificationEntry?.kind === 'evening';
   const reviewedEveningTasks = eveningReviewState[todayDate] ?? [];
   const unfinishedEveningTasks = todayTasks.filter((task) => !task.completed);
@@ -569,7 +580,10 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
 
   function completeMorningCheckIn() {
     setMorningCheckInState((current) => {
-      const next = { ...current, [todayPanelDate]: 'done' as const };
+      if (current[currentMorningCheckInKey] === 'done') {
+        return current;
+      }
+      const next = { ...current, [currentMorningCheckInKey]: 'done' as const };
       saveMorningCheckInState(next);
       return next;
     });
