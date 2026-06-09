@@ -37,7 +37,7 @@ describe('seven-day notification schedule planner', () => {
     expect(jobs.map((job) => job.scheduledFor)).toContain('2026-06-03T23:00:00');
     expect(jobs.map((job) => job.scheduledFor)).not.toContain('2026-06-07T23:00:00');
     expect(jobs.find((job) => job.jobId === 'morning:2026-06-01')).toMatchObject({
-      metadata: { title: '아침 체크리스트 알림', path: '/?date=2026-06-01&entry=morning' },
+      metadata: { title: '아침 체크리스트 알림', path: '/?date=2026-06-01&entry=morning&time=08%3A00' },
     });
     expect(jobs).toContainEqual(
       expect.objectContaining({

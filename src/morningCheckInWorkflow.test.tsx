@@ -84,4 +84,28 @@ describe('Morning check-in workflow', () => {
     expect(screen.getByRole('checkbox', { name: '어제 알림 할 일 완료' })).toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: '오늘 일반 할 일 완료' })).not.toBeInTheDocument();
   });
+
+  it('completes a same-day morning check-in instance after the reminder time changes without reopening that instance', async () => {
+    await createTask({ title: '새 알림으로 확인할 일', date: '2026-06-01', time: '09:00', recurrence: 'none', memo: '', notify: true });
+    localStorage.setItem('checklist-alarm:reminder-settings', JSON.stringify({ morningTime: '09:00', eveningTime: '23:00' }));
+    localStorage.setItem('checklist-alarm:morning-check-in-state', JSON.stringify({ '2026-06-01:08:00': 'done' }));
+    window.history.pushState({}, '', '/?date=2026-06-01&entry=morning&time=09%3A00');
+    const user = userEvent.setup();
+
+    const { unmount } = render(<App initialCalendarDate={new Date('2026-06-01T09:05:00')} />);
+
+    const card = await screen.findByRole('region', { name: '아침 체크인 카드' });
+    expect(within(card).getByRole('heading', { name: '아침 체크인' })).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: '오늘 체크인 완료' }));
+
+    await waitFor(() => expect(screen.queryByRole('region', { name: '아침 체크인 카드' })).not.toBeInTheDocument());
+    expect(JSON.parse(localStorage.getItem('checklist-alarm:morning-check-in-state') ?? '{}')).toMatchObject({
+      '2026-06-01:08:00': 'done',
+      '2026-06-01:09:00': 'done',
+    });
+
+    unmount();
+    render(<App initialCalendarDate={new Date('2026-06-01T09:10:00')} />);
+    expect(screen.queryByRole('region', { name: '아침 체크인 카드' })).not.toBeInTheDocument();
+  });
 });
