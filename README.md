@@ -15,7 +15,7 @@ Issue #2 implements the initial PWA app shell:
 - PWA manifest and local service worker foundation
 - Unit and smoke test harness
 
-Push notification support requires public HTTPS deployment plus real-device verification before production claims. See the iPhone PWA Web Push feasibility spike for requirements and limitations: [`docs/iphone-pwa-web-push-feasibility.md`](docs/iphone-pwa-web-push-feasibility.md). See the Issue #13 HITL deployment handoff/checklist: [`docs/public-deployment-iphone-verification.md`](docs/public-deployment-iphone-verification.md).
+Push notification support requires public HTTPS deployment plus real-device verification before production claims. See the iPhone PWA Web Push feasibility spike for requirements and limitations: [`docs/iphone-pwa-web-push-feasibility.md`](docs/iphone-pwa-web-push-feasibility.md). See the Issue #13 HITL deployment handoff/checklist: [`docs/public-deployment-iphone-verification.md`](docs/public-deployment-iphone-verification.md). See the final MVP QA hardening and handoff checklist: [`docs/mvp-qa-handoff.md`](docs/mvp-qa-handoff.md).
 
 ### Issue #3: Local task source of truth and Today CRUD
 
