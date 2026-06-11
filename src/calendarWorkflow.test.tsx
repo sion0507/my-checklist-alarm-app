@@ -234,6 +234,12 @@ describe('Calendar month view workflow', () => {
     expect(within(multiSheet).getByRole('button', { name: '캘린더 생성 저장' })).toBeDisabled();
     await user.click(within(multiSheet).getByRole('button', { name: '캘린더 생성 저장' }));
     expect(await listTasks()).toEqual([]);
+
+    await user.click(within(multiSheet).getByRole('tab', { name: '일반' }));
+    expect(within(multiSheet).getByRole('button', { name: '캘린더 생성 저장' })).toBeDisabled();
+    await user.click(within(multiSheet).getByRole('button', { name: '캘린더 생성 저장' }));
+    expect(await listTasks()).toEqual([]);
+    expect(screen.getByRole('dialog', { name: '캘린더 할 일 생성' })).toBeInTheDocument();
   });
 
   it('keeps the calendar creation sheet visually aligned to the mobile reference', () => {

@@ -157,7 +157,7 @@ function canSaveCalendarCreateForm(mode: CalendarCreateMode, form: CalendarCreat
   if (mode === 'repeat') {
     return isSupportedCalendarDateKey(form.repeatStartDate);
   }
-  return form.selectedDates.slice(0, 1).every(isSupportedCalendarDateKey);
+  return form.selectedDates.length > 0 && form.selectedDates.slice(0, 1).every(isSupportedCalendarDateKey);
 }
 
 function firstDateOnOrAfter(startDate: string, weekday: number) {
