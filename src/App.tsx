@@ -144,6 +144,22 @@ function createCalendarCreateForm(date: string): CalendarCreateForm {
   };
 }
 
+function canSaveCalendarCreateForm(mode: CalendarCreateMode, form: CalendarCreateForm) {
+  if (!form.title.trim()) {
+    return false;
+  }
+  if (mode === 'range') {
+    return isSupportedCalendarDateKey(form.rangeStart) && isSupportedCalendarDateKey(form.rangeEnd);
+  }
+  if (mode === 'multi') {
+    return form.selectedDates.length > 0 && form.selectedDates.every(isSupportedCalendarDateKey);
+  }
+  if (mode === 'repeat') {
+    return isSupportedCalendarDateKey(form.repeatStartDate);
+  }
+  return form.selectedDates.slice(0, 1).every(isSupportedCalendarDateKey);
+}
+
 function firstDateOnOrAfter(startDate: string, weekday: number) {
   const start = parseDateKey(startDate);
   const delta = (weekday - start.getDay() + 7) % 7;
@@ -625,7 +641,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
         const selectedDates = current.selectedDates.includes(date)
           ? current.selectedDates.filter((item) => item !== date)
           : [...current.selectedDates, date].sort();
-        return { ...current, selectedDates: selectedDates.length > 0 ? selectedDates : [date] };
+        return { ...current, selectedDates };
       });
       return;
     }
@@ -642,10 +658,10 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }
 
   async function handleSaveCalendarCreateSheet() {
-    const title = calendarCreateForm.title.trim();
-    if (!title) {
+    if (!canSaveCalendarCreateForm(calendarCreateMode, calendarCreateForm)) {
       return;
     }
+    const title = calendarCreateForm.title.trim();
 
     if (calendarCreateMode === 'repeat') {
       if (calendarCreateForm.repeatType === 'weekly') {
@@ -672,7 +688,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       }
     } else {
       const dates = calendarCreateMode === 'range'
-        ? enumerateDateRange(calendarCreateForm.rangeStart, calendarCreateForm.rangeEnd || calendarCreateForm.rangeStart)
+        ? enumerateDateRange(calendarCreateForm.rangeStart, calendarCreateForm.rangeEnd)
         : calendarCreateMode === 'multi'
           ? calendarCreateForm.selectedDates
           : calendarCreateForm.selectedDates.slice(0, 1);
@@ -1551,6 +1567,7 @@ function CalendarCreateSheet({
 }: CalendarCreateSheetProps) {
   const rangeDates = mode === 'range' && form.rangeStart ? new Set(enumerateDateRange(form.rangeStart, form.rangeEnd || form.rangeStart)) : new Set<string>();
   const repeatRecurrenceValue: Recurrence = form.repeatType === 'yearly' ? 'yearly' : form.repeatType === 'monthly' ? 'monthly' : 'weekly';
+  const isSaveDisabled = !canSaveCalendarCreateForm(mode, form);
 
   return (
     <div className="calendar-create-sheet-layer" role="presentation">
@@ -1558,7 +1575,7 @@ function CalendarCreateSheet({
         <div className="calendar-sheet-handle" data-testid="calendar-sheet-handle" />
         <div className="calendar-sheet-actions">
           <button className="sheet-cancel-button" aria-label="캘린더 생성 취소" onClick={onCancel} type="button">🗓︎×</button>
-          <button className="sheet-save-button" aria-label="캘린더 생성 저장" onClick={onSave} type="button">✓</button>
+          <button className="sheet-save-button" aria-label="캘린더 생성 저장" disabled={isSaveDisabled} onClick={onSave} type="button">✓</button>
         </div>
         <label className="calendar-create-title-label">
           캘린더 생성 제목

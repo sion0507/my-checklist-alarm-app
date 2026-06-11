@@ -207,6 +207,35 @@ describe('Calendar month view workflow', () => {
     expect(await screen.findByRole('checkbox', { name: '일반 생성 완료' })).toBeInTheDocument();
   }, 30000);
 
+  it('blocks invalid calendar sheet saves for empty range and empty multi selections', async () => {
+    const user = userEvent.setup();
+    render(<App initialCalendarDate={new Date(2026, 5, 9)} />);
+    await user.click(screen.getByRole('tab', { name: /캘린더/ }));
+
+    await user.click(screen.getByRole('button', { name: '캘린더에서 할 일 만들기' }));
+    const rangeSheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
+    await user.click(within(rangeSheet).getByRole('tab', { name: '기간' }));
+    fireEvent.change(within(rangeSheet).getByLabelText('캘린더 생성 제목'), { target: { value: '날짜 없는 기간' } });
+    expect(within(rangeSheet).getByRole('button', { name: '캘린더 생성 저장' })).toBeDisabled();
+    await user.click(within(rangeSheet).getByRole('button', { name: '캘린더 생성 저장' }));
+    expect(await listTasks()).toEqual([]);
+    expect(screen.getByRole('dialog', { name: '캘린더 할 일 생성' })).toBeInTheDocument();
+
+    await user.click(within(rangeSheet).getByRole('button', { name: '캘린더 생성 취소' }));
+    await user.click(screen.getByRole('button', { name: '캘린더에서 할 일 만들기' }));
+    const multiSheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
+    await user.click(within(multiSheet).getByRole('tab', { name: '다중' }));
+    fireEvent.change(within(multiSheet).getByLabelText('캘린더 생성 제목'), { target: { value: '빈 다중' } });
+    const june9 = within(multiSheet).getByRole('button', { name: /2026-06-09/ });
+    await user.click(june9);
+    expect(june9).toHaveClass('multi-selected');
+    await user.click(june9);
+    expect(june9).not.toHaveClass('multi-selected');
+    expect(within(multiSheet).getByRole('button', { name: '캘린더 생성 저장' })).toBeDisabled();
+    await user.click(within(multiSheet).getByRole('button', { name: '캘린더 생성 저장' }));
+    expect(await listTasks()).toEqual([]);
+  });
+
   it('keeps the calendar creation sheet visually aligned to the mobile reference', () => {
     expect(styles).toMatch(/\.calendar-create-sheet\s*\{[^}]*border-radius:\s*36px 36px 0 0/s);
     expect(styles).toMatch(/\.calendar-sheet-handle\s*\{[^}]*width:\s*56px/s);
