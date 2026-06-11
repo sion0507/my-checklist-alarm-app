@@ -1,4 +1,5 @@
 export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type TaskCreationType = 'single' | 'range' | 'repeat' | 'multi';
 
 export type TaskException = {
   completed?: boolean;
@@ -17,6 +18,7 @@ export type Task = {
   exceptions?: TaskExceptionMap;
   memo: string;
   notify: boolean;
+  creationType?: TaskCreationType;
   completed: boolean;
   createdAt: string;
   updatedAt: string;
@@ -35,6 +37,7 @@ export type TaskInput = {
   recurrence: Recurrence;
   memo: string;
   notify: boolean;
+  creationType?: TaskCreationType;
 };
 
 const DB_NAME = 'checklist-alarm-db';
@@ -95,6 +98,7 @@ export async function createTask(input: TaskInput) {
   const task: Task = {
     ...input,
     title: input.title.trim(),
+    creationType: input.creationType ?? (input.recurrence === 'none' ? 'single' : 'repeat'),
     id: createId(),
     completed: false,
     createdAt: now,

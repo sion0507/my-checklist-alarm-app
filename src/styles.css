@@ -69,6 +69,14 @@ button {
   --theme-success-text: #166534;
   --theme-holiday-text: #b45309;
   --theme-anniversary-text: #db2777;
+  --task-type-single-bg: #dbeafe;
+  --task-type-single-text: #1e3a8a;
+  --task-type-range-bg: #dcfce7;
+  --task-type-range-text: #14532d;
+  --task-type-repeat-bg: #fef3c7;
+  --task-type-repeat-text: #713f12;
+  --task-type-multi-bg: #fee2e2;
+  --task-type-multi-text: #7f1d1d;
   align-items: center;
   background: var(--theme-app-background);
   color: var(--theme-text);
@@ -132,6 +140,14 @@ button {
   --theme-success-text: #bbf7d0;
   --theme-holiday-text: #facc15;
   --theme-anniversary-text: #f9a8d4;
+  --task-type-single-bg: #1e3a8a;
+  --task-type-single-text: #dbeafe;
+  --task-type-range-bg: #14532d;
+  --task-type-range-text: #dcfce7;
+  --task-type-repeat-bg: #713f12;
+  --task-type-repeat-text: #fef3c7;
+  --task-type-multi-bg: #7f1d1d;
+  --task-type-multi-text: #fee2e2;
 }
 
 .app-shell[data-theme-mode='dark'][data-theme-color='blue'] {
@@ -657,6 +673,55 @@ h1 {
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
+.task-type-legend {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-type-legend li {
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 900;
+  overflow: hidden;
+  padding: 6px 7px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-type-legend-single,
+.task-pill-single,
+.selected-task-single button {
+  background: var(--task-type-single-bg);
+  color: var(--task-type-single-text);
+}
+
+.task-type-legend-range,
+.task-pill-range,
+.selected-task-range button {
+  background: var(--task-type-range-bg);
+  color: var(--task-type-range-text);
+}
+
+.task-type-legend-repeat,
+.task-pill-repeat,
+.selected-task-repeat button {
+  background: var(--task-type-repeat-bg);
+  color: var(--task-type-repeat-text);
+}
+
+.task-type-legend-multi,
+.task-pill-multi,
+.selected-task-multi button {
+  background: var(--task-type-multi-bg);
+  color: var(--task-type-multi-text);
+}
+
 .calendar-jump {
   background: var(--theme-surface);
   border: 1px solid var(--theme-border);
@@ -794,10 +859,13 @@ h1 {
 }
 
 .task-pill {
-  background: var(--theme-accent-soft);
-  border: 0;
-  color: var(--theme-accent-dark);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   width: 100%;
+}
+
+.task-type-icon {
+  font-weight: 900;
+  margin-right: 3px;
 }
 
 .more-pill {
@@ -1140,6 +1208,32 @@ h1 {
   padding: 10px 12px;
   text-align: left;
   width: 100%;
+}
+
+.selected-task-single button {
+  background: var(--task-type-single-bg);
+  color: var(--task-type-single-text);
+}
+
+.selected-task-range button {
+  background: var(--task-type-range-bg);
+  color: var(--task-type-range-text);
+}
+
+.selected-task-repeat button {
+  background: var(--task-type-repeat-bg);
+  color: var(--task-type-repeat-text);
+}
+
+.selected-task-multi button {
+  background: var(--task-type-multi-bg);
+  color: var(--task-type-multi-text);
+}
+
+.selected-task-type-label {
+  display: block;
+  font-size: 0.72rem;
+  margin-top: 4px;
 }
 
 .settings-panel {
