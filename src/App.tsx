@@ -72,6 +72,7 @@ const recurrenceLabels: Record<Recurrence, string> = {
   daily: '매일',
   weekly: '매주',
   monthly: '매월',
+  yearly: '매년',
 };
 
 const reminderSettingsKey = 'checklist-alarm:reminder-settings';
@@ -107,6 +108,62 @@ function clampCalendarDateKey(dateKey: string) {
 
 function isSupportedCalendarDateKey(dateKey: string) {
   return dateKey >= minimumCalendarDateKey && dateKey <= maximumCalendarDateKey;
+}
+
+function parseDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addDaysToDateKey(dateKey: string, days: number) {
+  const date = parseDateKey(dateKey);
+  date.setDate(date.getDate() + days);
+  return formatDateKey(date);
+}
+
+function enumerateDateRange(startDate: string, endDate: string) {
+  const start = startDate <= endDate ? startDate : endDate;
+  const end = startDate <= endDate ? endDate : startDate;
+  const dates: string[] = [];
+  for (let current = start; current <= end; current = addDaysToDateKey(current, 1)) {
+    dates.push(current);
+  }
+  return dates;
+}
+
+function createCalendarCreateForm(date: string): CalendarCreateForm {
+  return {
+    title: '',
+    selectedDates: [date],
+    rangeStart: '',
+    rangeEnd: '',
+    repeatType: 'weekly',
+    repeatStartDate: date,
+    repeatEndDate: '',
+    repeatWeekdays: [],
+  };
+}
+
+function canSaveCalendarCreateForm(mode: CalendarCreateMode, form: CalendarCreateForm) {
+  if (!form.title.trim()) {
+    return false;
+  }
+  if (mode === 'range') {
+    return isSupportedCalendarDateKey(form.rangeStart) && isSupportedCalendarDateKey(form.rangeEnd);
+  }
+  if (mode === 'multi') {
+    return form.selectedDates.length > 0 && form.selectedDates.every(isSupportedCalendarDateKey);
+  }
+  if (mode === 'repeat') {
+    return isSupportedCalendarDateKey(form.repeatStartDate);
+  }
+  return form.selectedDates.length > 0 && form.selectedDates.slice(0, 1).every(isSupportedCalendarDateKey);
+}
+
+function firstDateOnOrAfter(startDate: string, weekday: number) {
+  const start = parseDateKey(startDate);
+  const delta = (weekday - start.getDay() + 7) % 7;
+  return addDaysToDateKey(startDate, delta);
 }
 
 const defaultReminderSettings: ReminderSettings = {
@@ -157,6 +214,36 @@ type NotificationActionStatus = {
 
 type MorningCheckInState = Record<string, 'done'>;
 type EveningReviewState = Record<string, string[]>;
+type CalendarCreateMode = 'single' | 'range' | 'repeat' | 'multi';
+type CalendarRepeatType = 'yearly' | 'monthly' | 'weekly';
+
+type CalendarCreateForm = {
+  title: string;
+  selectedDates: string[];
+  rangeStart: string;
+  rangeEnd: string;
+  repeatType: CalendarRepeatType;
+  repeatStartDate: string;
+  repeatEndDate: string;
+  repeatWeekdays: number[];
+};
+
+const calendarCreateTabs: Array<{ id: CalendarCreateMode; label: string }> = [
+  { id: 'single', label: '일반' },
+  { id: 'range', label: '기간' },
+  { id: 'repeat', label: '반복' },
+  { id: 'multi', label: '다중' },
+];
+
+const repeatTypeLabels: Record<CalendarRepeatType, string> = {
+  yearly: '매년',
+  monthly: '매월',
+  weekly: '매주',
+};
+
+const koreanWeekdays = ['일', '월', '화', '수', '목', '금', '토'];
+const koreanWeekdayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+
 
 function morningCheckInInstanceKey(date: string, time: string) {
   return `${date}:${time}`;
@@ -345,6 +432,9 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   const [eveningReviewState, setEveningReviewState] = useState(loadEveningReviewState);
   const [eveningMoveDates, setEveningMoveDates] = useState<Record<string, string>>({});
   const [calendarQuickTitle, setCalendarQuickTitle] = useState('');
+  const [isCalendarCreateSheetOpen, setIsCalendarCreateSheetOpen] = useState(false);
+  const [calendarCreateMode, setCalendarCreateMode] = useState<CalendarCreateMode>('single');
+  const [calendarCreateForm, setCalendarCreateForm] = useState<CalendarCreateForm>(() => createCalendarCreateForm(formatDateKey(initialCalendarDate)));
   const [isSelectedDateModalOpen, setIsSelectedDateModalOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => {
     const initialDate = initialNotificationEntry?.date ? new Date(`${initialNotificationEntry.date}T00:00:00`) : initialCalendarDate;
@@ -515,6 +605,110 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
       notify: false,
     });
     setCalendarQuickTitle('');
+    await refreshTasks();
+  }
+
+  function openCalendarCreateSheet() {
+    setCalendarCreateMode('single');
+    setCalendarCreateForm(createCalendarCreateForm(selectedCalendarDate));
+    setIsSelectedDateModalOpen(false);
+    setIsCalendarCreateSheetOpen(true);
+  }
+
+  function closeCalendarCreateSheet() {
+    setIsCalendarCreateSheetOpen(false);
+  }
+
+  function updateCalendarCreateForm(updates: Partial<CalendarCreateForm>) {
+    setCalendarCreateForm((current) => ({ ...current, ...updates }));
+  }
+
+  function handleCalendarCreateModeChange(mode: CalendarCreateMode) {
+    setCalendarCreateMode(mode);
+    if (mode === 'range') {
+      setCalendarCreateForm((current) => ({ ...current, rangeStart: '', rangeEnd: '' }));
+    }
+    if (mode === 'multi') {
+      setCalendarCreateForm((current) => ({ ...current, selectedDates: [] }));
+    }
+  }
+
+  function handleCalendarCreateDatePick(date: string) {
+    if (!isSupportedCalendarDateKey(date)) {
+      return;
+    }
+    setSelectedCalendarDate(date);
+    if (calendarCreateMode === 'range') {
+      setCalendarCreateForm((current) => {
+        if (!current.rangeStart || (current.rangeEnd && current.rangeEnd !== current.rangeStart)) {
+          return { ...current, rangeStart: date, rangeEnd: '' };
+        }
+        return { ...current, rangeEnd: date };
+      });
+      return;
+    }
+    if (calendarCreateMode === 'multi') {
+      setCalendarCreateForm((current) => {
+        const selectedDates = current.selectedDates.includes(date)
+          ? current.selectedDates.filter((item) => item !== date)
+          : [...current.selectedDates, date].sort();
+        return { ...current, selectedDates };
+      });
+      return;
+    }
+    setCalendarCreateForm((current) => ({ ...current, selectedDates: [date], repeatStartDate: date }));
+  }
+
+  function toggleCalendarRepeatWeekday(weekday: number) {
+    setCalendarCreateForm((current) => {
+      const repeatWeekdays = current.repeatWeekdays.includes(weekday)
+        ? current.repeatWeekdays.filter((item) => item !== weekday)
+        : [...current.repeatWeekdays, weekday].sort((a, b) => a - b);
+      return { ...current, repeatWeekdays };
+    });
+  }
+
+  async function handleSaveCalendarCreateSheet() {
+    if (!canSaveCalendarCreateForm(calendarCreateMode, calendarCreateForm)) {
+      return;
+    }
+    const title = calendarCreateForm.title.trim();
+
+    if (calendarCreateMode === 'repeat') {
+      if (calendarCreateForm.repeatType === 'weekly') {
+        const weekdays = calendarCreateForm.repeatWeekdays.length > 0 ? calendarCreateForm.repeatWeekdays : [parseDateKey(calendarCreateForm.repeatStartDate).getDay()];
+        for (const weekday of weekdays) {
+          await createTask({
+            title,
+            date: firstDateOnOrAfter(calendarCreateForm.repeatStartDate, weekday),
+            time: '',
+            recurrence: 'weekly',
+            memo: '',
+            notify: false,
+          });
+        }
+      } else {
+        await createTask({
+          title,
+          date: calendarCreateForm.repeatStartDate,
+          time: '',
+          recurrence: calendarCreateForm.repeatType === 'yearly' ? 'yearly' : 'monthly',
+          memo: '',
+          notify: false,
+        });
+      }
+    } else {
+      const dates = calendarCreateMode === 'range'
+        ? enumerateDateRange(calendarCreateForm.rangeStart, calendarCreateForm.rangeEnd)
+        : calendarCreateMode === 'multi'
+          ? calendarCreateForm.selectedDates
+          : calendarCreateForm.selectedDates.slice(0, 1);
+      for (const date of dates) {
+        await createTask({ title, date, time: '', recurrence: 'none', memo: '', notify: false });
+      }
+    }
+
+    setIsCalendarCreateSheetOpen(false);
     await refreshTasks();
   }
 
@@ -852,6 +1046,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
               highlightedTaskKey={highlightedTaskKey}
               month={calendarMonth}
               onJumpMonth={jumpCalendarMonth}
+              onOpenCreate={openCalendarCreateSheet}
               onOpenTask={handleAddSelectedTask}
               onSelectDate={handleSelectCalendarDate}
               onTouchEnd={handleCalendarTouchEnd}
@@ -909,6 +1104,21 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           onQuickTitleChange={setCalendarQuickTitle}
           selectedDate={selectedCalendarDate}
           selectedTasks={selectedTasks}
+        />
+      ) : null}
+
+      {isCalendarCreateSheetOpen ? (
+        <CalendarCreateSheet
+          form={calendarCreateForm}
+          mode={calendarCreateMode}
+          month={calendarMonth}
+          onCancel={closeCalendarCreateSheet}
+          onDatePick={handleCalendarCreateDatePick}
+          onFormChange={updateCalendarCreateForm}
+          onModeChange={handleCalendarCreateModeChange}
+          onMonthChange={changeCalendarMonth}
+          onSave={() => void handleSaveCalendarCreateSheet()}
+          onToggleWeekday={toggleCalendarRepeatWeekday}
         />
       ) : null}
 
@@ -1222,6 +1432,7 @@ type CalendarPanelProps = {
   onJumpMonth: (year: number, monthIndex: number) => void;
   onSelectDate: (date: string, returnFocusTarget?: HTMLElement) => void;
   onOpenTask: (task: TaskOccurrence) => void;
+  onOpenCreate: () => void;
   onTouchStart: (x: number) => void;
   onTouchEnd: (x: number) => void;
 };
@@ -1233,6 +1444,7 @@ function CalendarPanel({
   onJumpMonth,
   onSelectDate,
   onOpenTask,
+  onOpenCreate,
   onTouchStart,
   onTouchEnd,
 }: CalendarPanelProps) {
@@ -1242,6 +1454,9 @@ function CalendarPanel({
 
   return (
     <div className="calendar-panel">
+      <button className="calendar-create-open-button" onClick={onOpenCreate} type="button">
+        캘린더에서 할 일 만들기
+      </button>
       <div className="calendar-jump" aria-label="연월 바로 이동">
         <label>
           연도 선택
@@ -1337,6 +1552,111 @@ function CalendarPanel({
         </div>
       </div>
 
+    </div>
+  );
+}
+
+
+type CalendarCreateSheetProps = {
+  mode: CalendarCreateMode;
+  form: CalendarCreateForm;
+  month: CalendarMonth;
+  onCancel: () => void;
+  onDatePick: (date: string) => void;
+  onFormChange: (updates: Partial<CalendarCreateForm>) => void;
+  onModeChange: (mode: CalendarCreateMode) => void;
+  onMonthChange: (delta: number) => void;
+  onSave: () => void;
+  onToggleWeekday: (weekday: number) => void;
+};
+
+function CalendarCreateSheet({
+  mode,
+  form,
+  month,
+  onCancel,
+  onDatePick,
+  onFormChange,
+  onModeChange,
+  onMonthChange,
+  onSave,
+  onToggleWeekday,
+}: CalendarCreateSheetProps) {
+  const rangeDates = mode === 'range' && form.rangeStart ? new Set(enumerateDateRange(form.rangeStart, form.rangeEnd || form.rangeStart)) : new Set<string>();
+  const repeatRecurrenceValue: Recurrence = form.repeatType === 'yearly' ? 'yearly' : form.repeatType === 'monthly' ? 'monthly' : 'weekly';
+  const isSaveDisabled = !canSaveCalendarCreateForm(mode, form);
+  const canMoveToPreviousMonth = month.year > minimumCalendarYear || month.monthIndex > 0;
+  const canMoveToNextMonth = month.year < maximumCalendarYear || month.monthIndex < 11;
+
+  return (
+    <div className="calendar-create-sheet-layer" role="presentation">
+      <section className="calendar-create-sheet" data-calendar-create-sheet="true" role="dialog" aria-modal="true" aria-label="캘린더 할 일 생성">
+        <div className="calendar-sheet-handle" data-testid="calendar-sheet-handle" />
+        <div className="calendar-sheet-actions">
+          <button className="sheet-cancel-button" aria-label="캘린더 생성 취소" onClick={onCancel} type="button">×</button>
+          <button className="sheet-save-button" aria-label="캘린더 생성 저장" disabled={isSaveDisabled} onClick={onSave} type="button">✓</button>
+        </div>
+        <label className="calendar-create-title-label">
+          캘린더 생성 제목
+          <input value={form.title} onChange={(event) => onFormChange({ title: event.target.value })} placeholder="할 일 제목" type="text" />
+        </label>
+        <div className="calendar-create-tabs" role="tablist" aria-label="캘린더 생성 유형">
+          {calendarCreateTabs.map((tab) => (
+            <button aria-selected={mode === tab.id} className={`calendar-create-tab ${mode === tab.id ? 'active' : ''}`} key={tab.id} onClick={() => onModeChange(tab.id)} role="tab" type="button">
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {mode === 'repeat' ? (
+          <div className="repeat-settings-card">
+            <label className="repeat-setting-row">
+              <span>↪ 반복 유형</span>
+              <select value={form.repeatType} onChange={(event) => onFormChange({ repeatType: event.target.value as CalendarRepeatType })} aria-label="반복 유형">
+                {Object.entries(repeatTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            {form.repeatType === 'weekly' ? (
+              <div className="repeat-weekday-row" aria-label="반복 요일 선택">
+                {koreanWeekdays.map((weekday, index) => (
+                  <button aria-label={`${koreanWeekdayNames[index]} 선택`} className={`repeat-weekday-pill ${form.repeatWeekdays.includes(index) ? 'selected' : ''}`} key={weekday} onClick={() => onToggleWeekday(index)} type="button">
+                    {weekday}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <label className="repeat-setting-row">
+              <span>▦ 시작 날짜</span>
+              <input aria-label="시작 날짜" type="date" value={form.repeatStartDate} onChange={(event) => onFormChange({ repeatStartDate: event.target.value })} />
+            </label>
+            <label className="repeat-setting-row">
+              <span>▦ 종료 날짜</span>
+              <input aria-label="종료 날짜 없음" type="text" readOnly value={form.repeatEndDate || '없음'} />
+            </label>
+            <p className="settings-help">저장 시 {recurrenceLabels[repeatRecurrenceValue]} 반복 할 일로 오늘/캘린더에 함께 표시됩니다.</p>
+          </div>
+        ) : (
+          <div className="calendar-create-month" aria-label={`${month.title} 생성 캘린더`}>
+            <div className="calendar-create-month-header">
+              <button aria-label="이전 생성 월" disabled={!canMoveToPreviousMonth} onClick={() => onMonthChange(-1)} type="button">‹</button>
+              <h2>{month.year}년 {month.monthIndex + 1}월</h2>
+              <button aria-label="다음 생성 월" disabled={!canMoveToNextMonth} onClick={() => onMonthChange(1)} type="button">›</button>
+            </div>
+            <div className="calendar-create-weekdays" role="row">
+              {koreanWeekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
+            </div>
+            <div className="calendar-create-grid">
+              {month.days.map((day) => {
+                const isSingleSelected = mode === 'single' && form.selectedDates.includes(day.date);
+                const isMultiSelected = mode === 'multi' && form.selectedDates.includes(day.date);
+                const isRangeEndpoint = mode === 'range' && (day.date === form.rangeStart || day.date === form.rangeEnd);
+                const isInRange = mode === 'range' && rangeDates.has(day.date) && !isRangeEndpoint;
+                const classes = ['calendar-create-day', day.isCurrentMonth ? '' : 'adjacent-month', isSingleSelected ? 'single-selected' : '', isMultiSelected ? 'multi-selected' : '', isRangeEndpoint ? 'range-endpoint' : '', isInRange ? 'in-range' : ''].filter(Boolean).join(' ');
+                return <button aria-label={`${day.date} 선택`} className={classes} key={day.date} onClick={() => onDatePick(day.date)} type="button">{day.dayNumber}</button>;
+              })}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
