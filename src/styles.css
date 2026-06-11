@@ -923,11 +923,37 @@ h1 {
   color: #93c5fd;
 }
 
-.calendar-create-month h2 {
+.calendar-create-month-header {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 48px 1fr 48px;
+  margin: 0 0 22px;
+}
+
+.calendar-create-month-header h2 {
   color: #020617;
   font-size: 1.8rem;
   letter-spacing: -0.05em;
-  margin: 0 0 22px;
+  margin: 0;
+  text-align: center;
+}
+
+.calendar-create-month-header button {
+  background: #ffffff;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(125, 154, 190, 0.14);
+  color: #7aa7f8;
+  font-size: 1.9rem;
+  font-weight: 900;
+  height: 48px;
+}
+
+.calendar-create-month-header button:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .calendar-create-weekdays,

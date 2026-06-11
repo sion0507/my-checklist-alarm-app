@@ -142,7 +142,10 @@ describe('Calendar month view workflow', () => {
     const sheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
     expect(sheet).toHaveAttribute('data-calendar-create-sheet', 'true');
     expect(within(sheet).getByTestId('calendar-sheet-handle')).toBeInTheDocument();
-    expect(within(sheet).getByRole('button', { name: '캘린더 생성 취소' })).toHaveClass('sheet-cancel-button');
+    const cancelButton = within(sheet).getByRole('button', { name: '캘린더 생성 취소' });
+    expect(cancelButton).toHaveClass('sheet-cancel-button');
+    expect(cancelButton).toHaveTextContent('×');
+    expect(cancelButton).not.toHaveTextContent('🗓');
     expect(within(sheet).getByRole('button', { name: '캘린더 생성 저장' })).toHaveClass('sheet-save-button');
     expect(within(sheet).getByRole('tab', { name: '일반' })).toHaveClass('active');
 
@@ -206,6 +209,27 @@ describe('Calendar month view workflow', () => {
     await user.click(screen.getByRole('tab', { name: /오늘/ }));
     expect(await screen.findByRole('checkbox', { name: '일반 생성 완료' })).toBeInTheDocument();
   }, 30000);
+
+  it('creates a calendar sheet task after moving the sheet to another month', async () => {
+    const user = userEvent.setup();
+    render(<App initialCalendarDate={new Date(2026, 5, 9)} />);
+    await user.click(screen.getByRole('tab', { name: /캘린더/ }));
+    await user.click(screen.getByRole('button', { name: '캘린더에서 할 일 만들기' }));
+
+    const sheet = await screen.findByRole('dialog', { name: '캘린더 할 일 생성' });
+    expect(within(sheet).getByRole('heading', { name: '2026년 6월' })).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: '다음 생성 월' }));
+    expect(within(sheet).getByRole('heading', { name: '2026년 7월' })).toBeInTheDocument();
+    fireEvent.change(within(sheet).getByLabelText('캘린더 생성 제목'), { target: { value: '다른 월 생성' } });
+    await user.click(within(sheet).getByRole('button', { name: /2026-07-15/ }));
+    await user.click(within(sheet).getByRole('button', { name: '캘린더 생성 저장' }));
+
+    await waitFor(async () => {
+      expect(await listTasks()).toEqual(expect.arrayContaining([expect.objectContaining({ title: '다른 월 생성', date: '2026-07-15' })]));
+    });
+    expect(screen.getByLabelText('월 선택')).toHaveValue('6');
+    expect(await within(screen.getByRole('button', { name: /2026-07-15/ })).findByText('다른 월 생성')).toBeInTheDocument();
+  });
 
   it('blocks invalid calendar sheet saves for empty range and empty multi selections', async () => {
     const user = userEvent.setup();

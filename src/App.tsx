@@ -1102,6 +1102,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           onDatePick={handleCalendarCreateDatePick}
           onFormChange={updateCalendarCreateForm}
           onModeChange={handleCalendarCreateModeChange}
+          onMonthChange={changeCalendarMonth}
           onSave={() => void handleSaveCalendarCreateSheet()}
           onToggleWeekday={toggleCalendarRepeatWeekday}
         />
@@ -1550,6 +1551,7 @@ type CalendarCreateSheetProps = {
   onDatePick: (date: string) => void;
   onFormChange: (updates: Partial<CalendarCreateForm>) => void;
   onModeChange: (mode: CalendarCreateMode) => void;
+  onMonthChange: (delta: number) => void;
   onSave: () => void;
   onToggleWeekday: (weekday: number) => void;
 };
@@ -1562,19 +1564,22 @@ function CalendarCreateSheet({
   onDatePick,
   onFormChange,
   onModeChange,
+  onMonthChange,
   onSave,
   onToggleWeekday,
 }: CalendarCreateSheetProps) {
   const rangeDates = mode === 'range' && form.rangeStart ? new Set(enumerateDateRange(form.rangeStart, form.rangeEnd || form.rangeStart)) : new Set<string>();
   const repeatRecurrenceValue: Recurrence = form.repeatType === 'yearly' ? 'yearly' : form.repeatType === 'monthly' ? 'monthly' : 'weekly';
   const isSaveDisabled = !canSaveCalendarCreateForm(mode, form);
+  const canMoveToPreviousMonth = month.year > minimumCalendarYear || month.monthIndex > 0;
+  const canMoveToNextMonth = month.year < maximumCalendarYear || month.monthIndex < 11;
 
   return (
     <div className="calendar-create-sheet-layer" role="presentation">
       <section className="calendar-create-sheet" data-calendar-create-sheet="true" role="dialog" aria-modal="true" aria-label="캘린더 할 일 생성">
         <div className="calendar-sheet-handle" data-testid="calendar-sheet-handle" />
         <div className="calendar-sheet-actions">
-          <button className="sheet-cancel-button" aria-label="캘린더 생성 취소" onClick={onCancel} type="button">🗓︎×</button>
+          <button className="sheet-cancel-button" aria-label="캘린더 생성 취소" onClick={onCancel} type="button">×</button>
           <button className="sheet-save-button" aria-label="캘린더 생성 저장" disabled={isSaveDisabled} onClick={onSave} type="button">✓</button>
         </div>
         <label className="calendar-create-title-label">
@@ -1617,7 +1622,11 @@ function CalendarCreateSheet({
           </div>
         ) : (
           <div className="calendar-create-month" aria-label={`${month.title} 생성 캘린더`}>
-            <h2>{month.year}년 {month.monthIndex + 1}월</h2>
+            <div className="calendar-create-month-header">
+              <button aria-label="이전 생성 월" disabled={!canMoveToPreviousMonth} onClick={() => onMonthChange(-1)} type="button">‹</button>
+              <h2>{month.year}년 {month.monthIndex + 1}월</h2>
+              <button aria-label="다음 생성 월" disabled={!canMoveToNextMonth} onClick={() => onMonthChange(1)} type="button">›</button>
+            </div>
             <div className="calendar-create-weekdays" role="row">
               {koreanWeekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
             </div>
