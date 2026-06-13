@@ -171,6 +171,10 @@ export function createPushPayload(payload: PushPayload): PushPayload {
   };
 }
 
+function isPastTaskTimeJob(job: ScheduledNotificationInput, currentTime: number, timeZone?: string) {
+  return job.kind === 'task' && scheduledForMillis(job.scheduledFor, timeZone) <= currentTime;
+}
+
 export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Date(), store = createInMemoryPushStore() }: PushBackendOptions) {
   const { subscriptions, scheduledJobs, dueJobScores } = store;
 
@@ -255,8 +259,11 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
         throw new Error('Push subscription endpoint is required');
       }
 
-      const timestamp = now().toISOString();
-      const incomingIds = new Set(jobs.map((job) => job.jobId));
+      const currentTime = now().getTime();
+      const timezone = subscriptions.get(endpoint)?.metadata.timezone;
+      const activeJobs = jobs.filter((job) => !isPastTaskTimeJob(job, currentTime, timezone));
+      const timestamp = new Date(currentTime).toISOString();
+      const incomingIds = new Set(activeJobs.map((job) => job.jobId));
       let cancelled = 0;
 
       store.fullJobScans += 1;
@@ -267,7 +274,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
         }
       }
 
-      for (const job of jobs) {
+      for (const job of activeJobs) {
         const key = scheduledJobKey(endpoint, job.jobId);
         const previous = scheduledJobs.get(key);
         saveScheduledJob({
@@ -292,7 +299,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
         });
       }
 
-      return { ok: true, upserted: jobs.length, cancelled };
+      return { ok: true, upserted: activeJobs.length, cancelled };
     },
 
     listScheduledJobs(endpoint: string) {

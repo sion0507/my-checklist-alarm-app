@@ -352,14 +352,20 @@ async function sendTestNotification(endpoint) {
   });
 }
 
+function isPastTaskTimeJob(job, currentTime, timeZone) {
+  return job.kind === 'task' && scheduledForMillis(job.scheduledFor, timeZone) <= currentTime;
+}
+
 async function replaceScheduledJobs({ endpoint, jobs }) {
   if (!endpoint) {
     throw new Error('Push subscription endpoint is required');
   }
   const subscription = await getSubscription(endpoint);
   const timeZone = subscription?.metadata?.timezone;
-  const timestamp = new Date().toISOString();
-  const incomingIds = new Set(jobs.map((job) => job.jobId));
+  const currentTime = Date.now();
+  const activeJobs = jobs.filter((job) => !isPastTaskTimeJob(job, currentTime, timeZone));
+  const timestamp = new Date(currentTime).toISOString();
+  const incomingIds = new Set(activeJobs.map((job) => job.jobId));
   let cancelled = 0;
 
   for (const key of await listJobKeysForEndpoint(endpoint)) {
@@ -370,7 +376,7 @@ async function replaceScheduledJobs({ endpoint, jobs }) {
     }
   }
 
-  for (const job of jobs) {
+  for (const job of activeJobs) {
     const key = jobKey(endpoint, job.jobId);
     const previous = await getJob(key);
     await setJob(
@@ -395,7 +401,7 @@ async function replaceScheduledJobs({ endpoint, jobs }) {
     );
   }
 
-  return { ok: true, upserted: jobs.length, cancelled, durable: isRedisConfigured() };
+  return { ok: true, upserted: activeJobs.length, cancelled, durable: isRedisConfigured() };
 }
 
 async function sendDueScheduledNotifications({ limit = 25 } = {}) {

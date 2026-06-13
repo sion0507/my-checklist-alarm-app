@@ -107,7 +107,7 @@ describe('Evening unfinished-task review workflow', () => {
     await waitFor(async () => {
       expect(await listTasks()).toEqual([expect.objectContaining({ title: '옮길 일', date: '2026-06-03' })]);
     });
-    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 3_000 });
     const latestCall = fetchMock.mock.calls.at(-1) as unknown as [RequestInfo | URL, RequestInit];
     const latestBody = JSON.parse(latestCall[1].body as string);
     expect(latestBody.jobs).not.toContainEqual(expect.objectContaining({ jobId: 'evening:2026-06-01' }));

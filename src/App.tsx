@@ -499,7 +499,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
     scheduleSyncDebounceRef.current = window.setTimeout(() => {
       scheduleSyncDebounceRef.current = null;
       void runSync();
-    }, 250);
+    }, 1_500);
   }
 
   async function refreshTasks({ immediateScheduleSync = false }: { immediateScheduleSync?: boolean } = {}) {

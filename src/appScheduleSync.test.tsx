@@ -31,10 +31,30 @@ describe('App notification schedule sync triggers', () => {
 
     await user.click(await screen.findByRole('checkbox', { name: '알림 켜진 일 완료' }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 3_000 });
     const completionCall = fetchMock.mock.calls.at(-1) as unknown as [RequestInfo | URL, RequestInit];
     const completionBody = JSON.parse(completionCall[1].body as string);
     expect(completionBody.jobs.some((job: { kind: string }) => job.kind === 'task')).toBe(false);
+  });
+
+  it('debounces rapid task changes for at least one second before syncing once', async () => {
+    const today = getTodayDateString(new Date('2026-06-01T12:00:00'));
+    await createTask({ title: '디바운스 알림 일', date: today, time: '09:30', recurrence: 'none', memo: '', notify: true });
+    localStorage.setItem('checklist-alarm:push-subscription-endpoint', 'https://push.example/device-1');
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, upserted: 3, cancelled: 0 }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<App initialCalendarDate={new Date('2026-06-01T12:00:00')} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    fetchMock.mockClear();
+
+    await user.click(await screen.findByRole('checkbox', { name: '디바운스 알림 일 완료' }));
+
+    await new Promise((resolve) => setTimeout(resolve, 999));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
   });
 
   it('reconciles upcoming jobs immediately when reminder settings change with a stored endpoint', async () => {

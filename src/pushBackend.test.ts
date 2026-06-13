@@ -204,10 +204,11 @@ describe('push backend API behavior', () => {
 
   it('sends due task-time and in-window evening jobs while cancelling stale morning jobs', async () => {
     const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    let now = new Date('2026-06-01T09:00:00.000Z');
     const backend = createPushBackend({
       vapidPublicKey: 'public-key',
       sendPush,
-      now: () => new Date('2026-06-01T23:05:00.000Z'),
+      now: () => now,
     });
     await backend.upsertSubscription({ subscription: subscription() });
     await backend.replaceScheduledJobs({
@@ -240,6 +241,7 @@ describe('push backend API behavior', () => {
       ],
     });
 
+    now = new Date('2026-06-01T23:05:00.000Z');
     const result = await backend.sendDueScheduledNotifications({ limit: 10 });
 
     expect(result).toEqual({ ok: true, attempted: 2, sent: 2, failed: 0, remainingDue: 0 });
@@ -372,6 +374,49 @@ describe('push backend API behavior', () => {
 
     expect(sendPush).toHaveBeenCalledTimes(1);
     expect(backend.listScheduledJobs('https://push.example/device-1').map((job) => job.jobId)).not.toContain('morning:2026-06-01');
+  });
+
+  it('does not resurrect past task-time jobs after they were sent and removed', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    let now = new Date('2026-06-01T08:55:00.000Z');
+    const backend = createPushBackend({
+      vapidPublicKey: 'public-key',
+      sendPush,
+      now: () => now,
+    });
+    await backend.upsertSubscription({ subscription: subscription() });
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'task:task-1:2026-06-01',
+          kind: 'task',
+          scheduledFor: '2026-06-01T09:00:00',
+          metadata: { title: '과거 작업 알림', path: '/?date=2026-06-01&task=task-1', taskId: 'task-1', occurrenceDate: '2026-06-01' },
+        },
+      ],
+    });
+
+    now = new Date('2026-06-01T09:05:00.000Z');
+    await expect(backend.sendDueScheduledNotifications()).resolves.toMatchObject({ attempted: 1, sent: 1 });
+    expect(backend.listScheduledJobs('https://push.example/device-1')).toEqual([]);
+
+    now = new Date('2026-06-01T09:10:00.000Z');
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: [
+        {
+          jobId: 'task:task-1:2026-06-01',
+          kind: 'task',
+          scheduledFor: '2026-06-01T09:00:00',
+          metadata: { title: '과거 작업 알림', path: '/?date=2026-06-01&task=task-1', taskId: 'task-1', occurrenceDate: '2026-06-01' },
+        },
+      ],
+    });
+
+    await expect(backend.sendDueScheduledNotifications()).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    expect(sendPush).toHaveBeenCalledTimes(1);
+    expect(backend.listScheduledJobs('https://push.example/device-1')).toEqual([]);
   });
 
   it('uses subscription timezone metadata when deciding whether local scheduled jobs are due', async () => {
