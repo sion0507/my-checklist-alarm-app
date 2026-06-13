@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSevenDayNotificationSchedule, type ReminderScheduleSettings } from './notificationPlanner';
+import { buildUpcomingNotificationSchedule, type ReminderScheduleSettings } from './notificationPlanner';
 import type { Task } from './taskStore';
 
 const settings: ReminderScheduleSettings = {
@@ -23,19 +23,19 @@ function task(overrides: Partial<Task>): Task {
   };
 }
 
-describe('seven-day notification schedule planner', () => {
-  it('derives morning, evening, and time-specific jobs inside the next seven days only', () => {
-    const jobs = buildSevenDayNotificationSchedule({
-      tasks: [task({ id: 'inside', date: '2026-06-03' }), task({ id: 'outside', date: '2026-06-08' })],
+describe('upcoming notification schedule planner', () => {
+  it('derives morning, evening, and time-specific jobs inside the next three days only by default', () => {
+    const jobs = buildUpcomingNotificationSchedule({
+      tasks: [task({ id: 'inside', date: '2026-06-03' }), task({ id: 'outside', date: '2026-06-04' })],
       settings,
       startDate: '2026-06-01',
     });
 
-    expect(jobs.filter((job) => job.kind === 'morning')).toHaveLength(7);
+    expect(jobs.filter((job) => job.kind === 'morning')).toHaveLength(3);
     expect(jobs.filter((job) => job.kind === 'evening')).toHaveLength(1);
     expect(jobs.map((job) => job.scheduledFor)).toContain('2026-06-01T08:00:00');
     expect(jobs.map((job) => job.scheduledFor)).toContain('2026-06-03T23:00:00');
-    expect(jobs.map((job) => job.scheduledFor)).not.toContain('2026-06-07T23:00:00');
+    expect(jobs.map((job) => job.scheduledFor)).not.toContain('2026-06-04T23:00:00');
     expect(jobs.find((job) => job.jobId === 'morning:2026-06-01')).toMatchObject({
       metadata: { title: '아침 체크리스트 알림', path: '/?date=2026-06-01&entry=morning&time=08%3A00' },
     });
@@ -52,12 +52,24 @@ describe('seven-day notification schedule planner', () => {
         },
       }),
     );
-    expect(jobs.map((job) => job.jobId)).not.toContain('task:outside:2026-06-08');
+    expect(jobs.map((job) => job.jobId)).not.toContain('task:outside:2026-06-04');
     expect(JSON.stringify(jobs)).not.toContain('local-only memo');
   });
 
+  it('supports an explicit lookahead when callers need a longer schedule', () => {
+    const jobs = buildUpcomingNotificationSchedule({
+      tasks: [task({ id: 'inside', date: '2026-06-05' })],
+      settings,
+      startDate: '2026-06-01',
+      days: 5,
+    });
+
+    expect(jobs.filter((job) => job.kind === 'morning')).toHaveLength(5);
+    expect(jobs.map((job) => job.jobId)).toContain('task:inside:2026-06-05');
+  });
+
   it('schedules evening review only for dates with unfinished tasks', () => {
-    const jobs = buildSevenDayNotificationSchedule({
+    const jobs = buildUpcomingNotificationSchedule({
       tasks: [
         task({ id: 'done', date: '2026-06-01', completed: true }),
         task({ id: 'unfinished', date: '2026-06-02', completed: false, notify: false, time: '' }),
@@ -78,8 +90,8 @@ describe('seven-day notification schedule planner', () => {
   });
 
   it('uses configurable morning reminder time with 08:00 as the documented default setting', () => {
-    const defaultJobs = buildSevenDayNotificationSchedule({ tasks: [], settings, startDate: '2026-06-01' });
-    const customJobs = buildSevenDayNotificationSchedule({
+    const defaultJobs = buildUpcomingNotificationSchedule({ tasks: [], settings, startDate: '2026-06-01' });
+    const customJobs = buildUpcomingNotificationSchedule({
       tasks: [],
       settings: { ...settings, morningTime: '07:15' },
       startDate: '2026-06-01',
@@ -89,8 +101,8 @@ describe('seven-day notification schedule planner', () => {
     expect(customJobs.find((job) => job.jobId === 'morning:2026-06-01')).toMatchObject({ scheduledFor: '2026-06-01T07:15:00' });
   });
 
-  it('derives recurrence occurrences and respects completed, deleted, moved, and notify-off state', () => {
-    const jobs = buildSevenDayNotificationSchedule({
+  it('derives recurrence occurrences and respects completed, deleted, moved, and notify-off state inside the three-day horizon', () => {
+    const jobs = buildUpcomingNotificationSchedule({
       tasks: [
         task({ id: 'daily', date: '2026-06-01', recurrence: 'daily', exceptions: { '2026-06-02': { completed: true }, '2026-06-03': { deleted: true }, '2026-06-04': { movedTo: '2026-06-06' } } }),
         task({ id: 'weekly-off', date: '2026-06-01', recurrence: 'weekly', notify: false }),
@@ -100,13 +112,6 @@ describe('seven-day notification schedule planner', () => {
       startDate: '2026-06-01',
     }).filter((job) => job.kind === 'task');
 
-    expect(jobs.map((job) => job.jobId)).toEqual([
-      'task:daily:2026-06-01',
-      'task:daily:2026-06-05',
-      'task:daily:2026-06-04',
-      'task:daily:2026-06-06',
-      'task:daily:2026-06-07',
-    ]);
-    expect(jobs.find((job) => job.jobId === 'task:daily:2026-06-04')).toMatchObject({ scheduledFor: '2026-06-06T09:30:00' });
+    expect(jobs.map((job) => job.jobId)).toEqual(['task:daily:2026-06-01']);
   });
 });

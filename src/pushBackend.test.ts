@@ -110,7 +110,7 @@ describe('push backend API behavior', () => {
     ).resolves.toEqual({ status: 200, body: { ok: true, status: 201 } });
   });
 
-  it('replaces scheduled jobs with minimal derived metadata and marks missing jobs cancelled', async () => {
+  it('replaces scheduled jobs with minimal derived metadata and deletes missing jobs from active storage', async () => {
     const backend = createPushBackend({ vapidPublicKey: 'public-key', now: () => new Date('2026-06-01T00:00:00.000Z') });
     await backend.replaceScheduledJobs({
       endpoint: 'https://push.example/device-1',
@@ -147,7 +147,7 @@ describe('push backend API behavior', () => {
 
     const records = backend.listScheduledJobs('https://push.example/device-1');
     expect(records).toContainEqual(expect.objectContaining({ jobId: 'morning:2026-06-01', state: 'scheduled' }));
-    expect(records).toContainEqual(expect.objectContaining({ jobId: 'task:task-1:2026-06-01', state: 'cancelled' }));
+    expect(records.map((record) => record.jobId)).not.toContain('task:task-1:2026-06-01');
     expect(JSON.stringify(records)).not.toContain('must not be stored');
     expect(JSON.stringify(records)).not.toContain('completed');
   });
@@ -248,12 +248,49 @@ describe('push backend API behavior', () => {
       { title: '할 일', body: '예약된 할 일 시간입니다.', path: '/?date=2026-06-01&taskId=task-1' },
       { title: '저녁 리뷰', body: '오늘 남은 할 일을 리뷰해 주세요.', path: '/?date=2026-06-01' },
     ]);
-    expect(backend.listScheduledJobs('https://push.example/device-1')).toContainEqual(
-      expect.objectContaining({ jobId: 'morning:2026-06-01', state: 'cancelled', lastError: 'Missed configured notification window' }),
-    );
-    expect(backend.listScheduledJobs('https://push.example/device-1')).toContainEqual(
-      expect.objectContaining({ jobId: 'evening:2026-06-01', state: 'completed', attempts: 1, lastStatus: 201 }),
-    );
+    const activeJobs = backend.listScheduledJobs('https://push.example/device-1');
+    expect(activeJobs.map((job) => job.jobId)).not.toContain('morning:2026-06-01');
+    expect(activeJobs.map((job) => job.jobId)).not.toContain('evening:2026-06-01');
+    expect(activeJobs.map((job) => job.jobId)).not.toContain('task:task-1:2026-06-01');
+  });
+
+  it('uses the due index instead of scanning every active job when no jobs are due', async () => {
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const store = createInMemoryPushStore();
+    const backend = createPushBackend({
+      vapidPublicKey: 'public-key',
+      sendPush,
+      store,
+      now: () => new Date('2026-06-01T07:55:00.000Z'),
+    });
+    await backend.upsertSubscription({ subscription: subscription() });
+    await backend.replaceScheduledJobs({
+      endpoint: 'https://push.example/device-1',
+      jobs: Array.from({ length: 100 }, (_, index) => {
+        const date = new Date('2026-06-02T08:00:00.000Z');
+        date.setDate(date.getDate() + index);
+        const dateKey = date.toISOString().slice(0, 10);
+        return {
+          jobId: `morning:${dateKey}`,
+          kind: 'morning' as const,
+          scheduledFor: `${dateKey}T08:00:00`,
+          metadata: { title: '미래 아침 알림', path: `/?date=${dateKey}` },
+        };
+      }),
+    });
+    store.fullJobScans = 0;
+
+    await expect(backend.sendDueScheduledNotifications()).resolves.toEqual({
+      ok: true,
+      attempted: 0,
+      sent: 0,
+      failed: 0,
+      remainingDue: 0,
+    });
+
+    expect(store.dueIndexReads).toBe(1);
+    expect(store.fullJobScans).toBe(0);
+    expect(sendPush).not.toHaveBeenCalled();
   });
 
   it('does not send scheduled jobs before their due time', async () => {
@@ -334,9 +371,7 @@ describe('push backend API behavior', () => {
     await expect(backend.sendDueScheduledNotifications()).resolves.toMatchObject({ attempted: 0, sent: 0 });
 
     expect(sendPush).toHaveBeenCalledTimes(1);
-    expect(backend.listScheduledJobs('https://push.example/device-1')).toContainEqual(
-      expect.objectContaining({ jobId: 'morning:2026-06-01', state: 'completed', attempts: 1 }),
-    );
+    expect(backend.listScheduledJobs('https://push.example/device-1').map((job) => job.jobId)).not.toContain('morning:2026-06-01');
   });
 
   it('uses subscription timezone metadata when deciding whether local scheduled jobs are due', async () => {
