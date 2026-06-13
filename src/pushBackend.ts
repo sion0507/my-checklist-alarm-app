@@ -65,6 +65,9 @@ type SendPush = (subscription: StoredPushSubscription, payload: PushPayload) => 
 export type PushStore = {
   subscriptions: Map<string, StoredPushSubscription>;
   scheduledJobs: Map<string, ScheduledNotificationRecord>;
+  dueJobScores: Map<string, number>;
+  dueIndexReads: number;
+  fullJobScans: number;
 };
 
 type PushBackendOptions = {
@@ -154,6 +157,9 @@ export function createInMemoryPushStore(): PushStore {
   return {
     subscriptions: new Map<string, StoredPushSubscription>(),
     scheduledJobs: new Map<string, ScheduledNotificationRecord>(),
+    dueJobScores: new Map<string, number>(),
+    dueIndexReads: 0,
+    fullJobScans: 0,
   };
 }
 
@@ -165,8 +171,37 @@ export function createPushPayload(payload: PushPayload): PushPayload {
   };
 }
 
+function isPastTaskTimeJob(job: ScheduledNotificationInput, currentTime: number, timeZone?: string) {
+  return job.kind === 'task' && scheduledForMillis(job.scheduledFor, timeZone) <= currentTime;
+}
+
 export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Date(), store = createInMemoryPushStore() }: PushBackendOptions) {
-  const { subscriptions, scheduledJobs } = store;
+  const { subscriptions, scheduledJobs, dueJobScores } = store;
+
+  function saveScheduledJob(record: ScheduledNotificationRecord) {
+    const key = scheduledJobKey(record.endpoint, record.jobId);
+    scheduledJobs.set(key, record);
+    const timezone = subscriptions.get(record.endpoint)?.metadata.timezone;
+    dueJobScores.set(key, scheduledForMillis(record.scheduledFor, timezone));
+  }
+
+  function deleteScheduledJob(endpoint: string, jobId: string) {
+    const key = scheduledJobKey(endpoint, jobId);
+    scheduledJobs.delete(key);
+    dueJobScores.delete(key);
+  }
+
+  function listDueScheduledJobs(currentTime: number) {
+    store.dueIndexReads += 1;
+    return [...dueJobScores.entries()]
+      .filter(([, score]) => score <= currentTime)
+      .map(([key]) => scheduledJobs.get(key))
+      .filter((record): record is ScheduledNotificationRecord => Boolean(record))
+      .sort((a, b) => {
+        const first = a.scheduledFor.localeCompare(b.scheduledFor);
+        return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
+      });
+  }
 
   return {
     getVapidPublicKey() {
@@ -224,27 +259,25 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
         throw new Error('Push subscription endpoint is required');
       }
 
-      const timestamp = now().toISOString();
-      const incomingIds = new Set(jobs.map((job) => job.jobId));
+      const currentTime = now().getTime();
+      const timezone = subscriptions.get(endpoint)?.metadata.timezone;
+      const activeJobs = jobs.filter((job) => !isPastTaskTimeJob(job, currentTime, timezone));
+      const timestamp = new Date(currentTime).toISOString();
+      const incomingIds = new Set(activeJobs.map((job) => job.jobId));
       let cancelled = 0;
 
-      for (const record of scheduledJobs.values()) {
+      store.fullJobScans += 1;
+      for (const record of [...scheduledJobs.values()]) {
         if (record.endpoint === endpoint && record.state === 'scheduled' && !incomingIds.has(record.jobId)) {
-          scheduledJobs.set(scheduledJobKey(endpoint, record.jobId), {
-            ...record,
-            state: 'cancelled',
-            updatedAt: timestamp,
-            cancelledAt: timestamp,
-          });
+          deleteScheduledJob(endpoint, record.jobId);
           cancelled += 1;
         }
       }
 
-      for (const job of jobs) {
+      for (const job of activeJobs) {
         const key = scheduledJobKey(endpoint, job.jobId);
         const previous = scheduledJobs.get(key);
-        const nextState = previous?.state === 'completed' ? 'completed' : 'scheduled';
-        scheduledJobs.set(key, {
+        saveScheduledJob({
           endpoint,
           jobId: job.jobId,
           kind: job.kind,
@@ -255,7 +288,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
             taskId: job.metadata.taskId,
             occurrenceDate: job.metadata.occurrenceDate,
           },
-          state: nextState,
+          state: 'scheduled',
           attempts: previous?.attempts ?? 0,
           createdAt: previous?.createdAt ?? timestamp,
           updatedAt: timestamp,
@@ -266,7 +299,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
         });
       }
 
-      return { ok: true, upserted: jobs.length, cancelled };
+      return { ok: true, upserted: activeJobs.length, cancelled };
     },
 
     listScheduledJobs(endpoint: string) {
@@ -287,7 +320,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
       const timestamp = currentDate.toISOString();
       const currentTime = currentDate.getTime();
       const dueJobs: ScheduledNotificationRecord[] = [];
-      for (const record of scheduledJobs.values()) {
+      for (const record of listDueScheduledJobs(currentTime)) {
         if (record.state !== 'scheduled') {
           continue;
         }
@@ -297,13 +330,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
           continue;
         }
         if (isDailyNotificationKind(record.kind) && currentTime > scheduledTime + DAILY_NOTIFICATION_DELIVERY_WINDOW_MILLIS) {
-          scheduledJobs.set(scheduledJobKey(record.endpoint, record.jobId), {
-            ...record,
-            state: 'cancelled',
-            updatedAt: timestamp,
-            cancelledAt: timestamp,
-            lastError: 'Missed configured notification window',
-          });
+          deleteScheduledJob(record.endpoint, record.jobId);
           continue;
         }
         dueJobs.push(record);
@@ -320,15 +347,7 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
         const key = scheduledJobKey(record.endpoint, record.jobId);
         const subscription = subscriptions.get(record.endpoint);
         if (!subscription) {
-          scheduledJobs.set(key, {
-            ...record,
-            state: 'failed',
-            attempts: record.attempts + 1,
-            updatedAt: timestamp,
-            lastAttemptAt: timestamp,
-            failedAt: timestamp,
-            lastError: 'Push subscription not found',
-          });
+          deleteScheduledJob(record.endpoint, record.jobId);
           failed += 1;
           continue;
         }
@@ -345,28 +364,10 @@ export function createPushBackend({ vapidPublicKey, sendPush, now = () => new Da
           if (!result.ok) {
             throw new Error(`Web Push sender returned status ${result.status ?? 'unknown'}`);
           }
-          scheduledJobs.set(key, {
-            ...record,
-            state: 'completed',
-            attempts: record.attempts + 1,
-            updatedAt: timestamp,
-            lastAttemptAt: timestamp,
-            completedAt: timestamp,
-            lastStatus: result.status,
-            lastError: undefined,
-          });
+          deleteScheduledJob(record.endpoint, record.jobId);
           sent += 1;
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Scheduled push delivery failed';
-          scheduledJobs.set(key, {
-            ...record,
-            state: 'failed',
-            attempts: record.attempts + 1,
-            updatedAt: timestamp,
-            lastAttemptAt: timestamp,
-            failedAt: timestamp,
-            lastError: message,
-          });
+          deleteScheduledJob(record.endpoint, record.jobId);
           failed += 1;
         }
       }

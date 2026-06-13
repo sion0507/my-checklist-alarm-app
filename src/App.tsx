@@ -8,9 +8,9 @@ import {
   weekdayHeaders,
   type CalendarMonth,
 } from './calendarUtils';
-import { buildSevenDayNotificationSchedule } from './notificationPlanner';
+import { buildUpcomingNotificationSchedule, DEFAULT_NOTIFICATION_SCHEDULE_DAYS } from './notificationPlanner';
 import { enablePushSubscription, sendBackendTestPush } from './pushClient';
-import { syncUpcomingNotificationSchedule } from './scheduleSyncClient';
+import { resetScheduleSyncCache, syncUpcomingNotificationSchedule } from './scheduleSyncClient';
 import {
   completeTaskOccurrence,
   createTask,
@@ -461,42 +461,71 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
   }));
   const [settingsRecurringStatus, setSettingsRecurringStatus] = useState('');
   const didInitializeReminderSettings = useRef(false);
+  const scheduleSyncDebounceRef = useRef<number | null>(null);
   const selectedDateModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const selectedDateModalReturnFocusRef = useRef<HTMLElement | null>(null);
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const appToday = formatDateKey(initialCalendarDate);
   const todayPanelDate = initialDailyNotificationEntry?.date ?? appToday;
 
-  async function syncNotificationSchedule(storedTasks: Task[]) {
+  async function syncNotificationSchedule(storedTasks: Task[], { immediate = false }: { immediate?: boolean } = {}) {
     const endpoint = localStorage.getItem(pushSubscriptionEndpointKey);
-    const jobs = buildSevenDayNotificationSchedule({
+    const jobs = buildUpcomingNotificationSchedule({
       tasks: storedTasks,
       settings: reminderSettings,
       startDate: appToday,
+      days: DEFAULT_NOTIFICATION_SCHEDULE_DAYS,
     });
-    try {
-      await syncUpcomingNotificationSchedule({ endpoint, jobs });
-    } catch (error) {
-      console.warn('Notification schedule sync failed', error);
+    const runSync = async () => {
+      try {
+        await syncUpcomingNotificationSchedule({ endpoint, jobs, horizonDays: DEFAULT_NOTIFICATION_SCHEDULE_DAYS });
+      } catch (error) {
+        console.warn('Notification schedule sync failed', error);
+      }
+    };
+
+    if (immediate) {
+      if (scheduleSyncDebounceRef.current !== null) {
+        window.clearTimeout(scheduleSyncDebounceRef.current);
+        scheduleSyncDebounceRef.current = null;
+      }
+      await runSync();
+      return;
     }
+
+    if (scheduleSyncDebounceRef.current !== null) {
+      window.clearTimeout(scheduleSyncDebounceRef.current);
+    }
+    scheduleSyncDebounceRef.current = window.setTimeout(() => {
+      scheduleSyncDebounceRef.current = null;
+      void runSync();
+    }, 1_500);
   }
 
-  async function refreshTasks() {
+  async function refreshTasks({ immediateScheduleSync = false }: { immediateScheduleSync?: boolean } = {}) {
     const [todayOccurrences, storedTasks] = await Promise.all([listTaskOccurrencesForDate(todayPanelDate), listTasks()]);
     setTasks(todayOccurrences);
     setAllTasks(storedTasks);
-    await syncNotificationSchedule(storedTasks);
+    await syncNotificationSchedule(storedTasks, { immediate: immediateScheduleSync });
   }
 
   async function resyncNotificationScheduleFromStore() {
     if (!localStorage.getItem(pushSubscriptionEndpointKey)) {
       return;
     }
-    await syncNotificationSchedule(await listTasks());
+    await syncNotificationSchedule(await listTasks(), { immediate: true });
   }
 
   useEffect(() => {
-    void refreshTasks();
+    void refreshTasks({ immediateScheduleSync: true });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scheduleSyncDebounceRef.current !== null) {
+        window.clearTimeout(scheduleSyncDebounceRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -958,6 +987,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
         },
       });
       localStorage.setItem(pushSubscriptionEndpointKey, result.endpoint);
+      resetScheduleSyncCache();
       setNotificationPermission(Notification.permission);
       await resyncNotificationScheduleFromStore();
       await sendBackendTestPush(result.endpoint);

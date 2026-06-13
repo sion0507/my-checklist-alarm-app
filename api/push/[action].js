@@ -19,6 +19,7 @@ const memoryStore = {
   scheduledJobs: new Map(),
   jobKeysByEndpoint: new Map(),
   allJobKeys: new Set(),
+  dueJobScores: new Map(),
 };
 
 function json(res, status, body) {
@@ -64,6 +65,12 @@ function endpointJobsKey(endpoint) {
   return `push:jobs:${encodeKeyPart(endpoint)}`;
 }
 
+const dueJobsKey = 'push:due-jobs';
+
+function redisPipelineUrl() {
+  return `${redisUrl.replace(/\/$/, '')}/pipeline`;
+}
+
 async function redisCommand(command) {
   const response = await fetch(redisUrl, {
     method: 'POST',
@@ -81,6 +88,36 @@ async function redisCommand(command) {
     throw new Error(`Durable storage error: ${body.error}`);
   }
   return body.result;
+}
+
+async function redisPipeline(commands) {
+  if (commands.length === 0) {
+    return [];
+  }
+  if (commands.length === 1) {
+    return [await redisCommand(commands[0])];
+  }
+  const response = await fetch(redisPipelineUrl(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${redisToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(commands),
+  });
+  if (!response.ok) {
+    throw new Error(`Durable storage pipeline request failed with status ${response.status}`);
+  }
+  const body = await response.json();
+  if (!Array.isArray(body)) {
+    throw new Error('Durable storage pipeline returned an invalid response');
+  }
+  for (const item of body) {
+    if (item?.error) {
+      throw new Error(`Durable storage error: ${item.error}`);
+    }
+  }
+  return body.map((item) => item?.result);
 }
 
 async function redisSetJson(key, value) {
@@ -110,8 +147,10 @@ async function getSubscription(endpoint) {
 
 async function setSubscription(subscription) {
   if (isRedisConfigured()) {
-    await redisSetJson(subscriptionKey(subscription.endpoint), subscription);
-    await redisAddSetMember('push:subscriptions', subscription.endpoint);
+    await redisPipeline([
+      ['SET', subscriptionKey(subscription.endpoint), JSON.stringify(subscription)],
+      ['SADD', 'push:subscriptions', subscription.endpoint],
+    ]);
     return;
   }
   memoryStore.subscriptions.set(subscription.endpoint, subscription);
@@ -125,11 +164,14 @@ async function getJob(key) {
   return memoryStore.scheduledJobs.get(key) ?? null;
 }
 
-async function setJob(key, record) {
+async function setJob(key, record, timeZone) {
   if (isRedisConfigured()) {
-    await redisSetJson(key, record);
-    await redisAddSetMember(endpointJobsKey(record.endpoint), key);
-    await redisAddSetMember('push:jobs', key);
+    await redisPipeline([
+      ['SET', key, JSON.stringify(record)],
+      ['SADD', endpointJobsKey(record.endpoint), key],
+      ['SADD', 'push:jobs', key],
+      ['ZADD', dueJobsKey, scheduledForMillis(record.scheduledFor, timeZone), key],
+    ]);
     return;
   }
   memoryStore.scheduledJobs.set(key, record);
@@ -139,6 +181,31 @@ async function setJob(key, record) {
   }
   memoryStore.jobKeysByEndpoint.get(endpointKey).add(key);
   memoryStore.allJobKeys.add(key);
+  memoryStore.dueJobScores.set(key, scheduledForMillis(record.scheduledFor, timeZone));
+}
+
+async function deleteJob(key, endpoint) {
+  if (isRedisConfigured()) {
+    await redisPipeline([
+      ['DEL', key],
+      ['SREM', endpointJobsKey(endpoint), key],
+      ['SREM', 'push:jobs', key],
+      ['ZREM', dueJobsKey, key],
+    ]);
+    return;
+  }
+  memoryStore.scheduledJobs.delete(key);
+  memoryStore.jobKeysByEndpoint.get(endpointJobsKey(endpoint))?.delete(key);
+  memoryStore.allJobKeys.delete(key);
+  memoryStore.dueJobScores.delete(key);
+}
+
+async function removeDueJobKey(key) {
+  if (isRedisConfigured()) {
+    await redisCommand(['ZREM', dueJobsKey, key]);
+    return;
+  }
+  memoryStore.dueJobScores.delete(key);
 }
 
 async function listJobKeysForEndpoint(endpoint) {
@@ -153,6 +220,18 @@ async function listAllJobKeys() {
     return redisSetMembers('push:jobs');
   }
   return [...memoryStore.allJobKeys];
+}
+
+async function listDueJobKeys(currentTime, limit) {
+  if (isRedisConfigured()) {
+    const result = await redisCommand(['ZRANGEBYSCORE', dueJobsKey, '-inf', currentTime, 'LIMIT', 0, limit]);
+    return Array.isArray(result) ? result : [];
+  }
+  return [...memoryStore.dueJobScores.entries()]
+    .filter(([, score]) => score <= currentTime)
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([key]) => key);
 }
 
 function createPushPayload(payload) {
@@ -273,64 +352,72 @@ async function sendTestNotification(endpoint) {
   });
 }
 
+function isPastTaskTimeJob(job, currentTime, timeZone) {
+  return job.kind === 'task' && scheduledForMillis(job.scheduledFor, timeZone) <= currentTime;
+}
+
 async function replaceScheduledJobs({ endpoint, jobs }) {
   if (!endpoint) {
     throw new Error('Push subscription endpoint is required');
   }
-  const timestamp = new Date().toISOString();
-  const incomingIds = new Set(jobs.map((job) => job.jobId));
+  const subscription = await getSubscription(endpoint);
+  const timeZone = subscription?.metadata?.timezone;
+  const currentTime = Date.now();
+  const activeJobs = jobs.filter((job) => !isPastTaskTimeJob(job, currentTime, timeZone));
+  const timestamp = new Date(currentTime).toISOString();
+  const incomingIds = new Set(activeJobs.map((job) => job.jobId));
   let cancelled = 0;
 
   for (const key of await listJobKeysForEndpoint(endpoint)) {
     const record = await getJob(key);
     if (record?.endpoint === endpoint && record.state === 'scheduled' && !incomingIds.has(record.jobId)) {
-      await setJob(key, {
-        ...record,
-        state: 'cancelled',
-        updatedAt: timestamp,
-        cancelledAt: timestamp,
-      });
+      await deleteJob(key, endpoint);
       cancelled += 1;
     }
   }
 
-  for (const job of jobs) {
+  for (const job of activeJobs) {
     const key = jobKey(endpoint, job.jobId);
     const previous = await getJob(key);
-    const nextState = previous?.state === 'completed' ? 'completed' : 'scheduled';
-    await setJob(key, {
-      endpoint,
-      jobId: job.jobId,
-      kind: job.kind,
-      scheduledFor: job.scheduledFor,
-      metadata: {
-        title: job.metadata.title,
-        path: job.metadata.path,
-        taskId: job.metadata.taskId,
-        occurrenceDate: job.metadata.occurrenceDate,
+    await setJob(
+      key,
+      {
+        endpoint,
+        jobId: job.jobId,
+        kind: job.kind,
+        scheduledFor: job.scheduledFor,
+        metadata: {
+          title: job.metadata.title,
+          path: job.metadata.path,
+          taskId: job.metadata.taskId,
+          occurrenceDate: job.metadata.occurrenceDate,
+        },
+        state: 'scheduled',
+        attempts: previous?.attempts ?? 0,
+        createdAt: previous?.createdAt ?? timestamp,
+        updatedAt: timestamp,
       },
-      state: nextState,
-      attempts: previous?.attempts ?? 0,
-      createdAt: previous?.createdAt ?? timestamp,
-      updatedAt: timestamp,
-      lastAttemptAt: previous?.lastAttemptAt,
-      completedAt: previous?.completedAt,
-      lastStatus: previous?.lastStatus,
-      lastError: previous?.lastError,
-    });
+      timeZone,
+    );
   }
 
-  return { ok: true, upserted: jobs.length, cancelled, durable: isRedisConfigured() };
+  return { ok: true, upserted: activeJobs.length, cancelled, durable: isRedisConfigured() };
 }
 
 async function sendDueScheduledNotifications({ limit = 25 } = {}) {
   const now = new Date();
-  const timestamp = now.toISOString();
   const currentTime = now.getTime();
   const records = [];
-  for (const key of await listAllJobKeys()) {
+  const dueKeys = await listDueJobKeys(currentTime, limit);
+
+  for (const key of dueKeys) {
     const record = await getJob(key);
-    if (record?.state !== 'scheduled') {
+    if (!record) {
+      await removeDueJobKey(key);
+      continue;
+    }
+    if (record.state !== 'scheduled') {
+      await deleteJob(key, record.endpoint);
       continue;
     }
     const subscription = await getSubscription(record.endpoint);
@@ -339,38 +426,19 @@ async function sendDueScheduledNotifications({ limit = 25 } = {}) {
       continue;
     }
     if (isDailyNotificationKind(record.kind) && currentTime > scheduledTime + DAILY_NOTIFICATION_DELIVERY_WINDOW_MILLIS) {
-      await setJob(key, {
-        ...record,
-        state: 'cancelled',
-        updatedAt: timestamp,
-        cancelledAt: timestamp,
-        lastError: 'Missed configured notification window',
-      });
+      await deleteJob(key, record.endpoint);
       continue;
     }
-    records.push({ key, record });
+    records.push({ key, record, subscription });
   }
-  records.sort((a, b) => {
-    const first = a.record.scheduledFor.localeCompare(b.record.scheduledFor);
-    return first === 0 ? a.record.jobId.localeCompare(b.record.jobId) : first;
-  });
 
   const selected = records.slice(0, limit);
   let sent = 0;
   let failed = 0;
 
-  for (const { key, record } of selected) {
-    const subscription = await getSubscription(record.endpoint);
+  for (const { key, record, subscription } of selected) {
     if (!subscription) {
-      await setJob(key, {
-        ...record,
-        state: 'failed',
-        attempts: (record.attempts ?? 0) + 1,
-        updatedAt: timestamp,
-        lastAttemptAt: timestamp,
-        failedAt: timestamp,
-        lastError: 'Push subscription not found',
-      });
+      await deleteJob(key, record.endpoint);
       failed += 1;
       continue;
     }
@@ -387,32 +455,15 @@ async function sendDueScheduledNotifications({ limit = 25 } = {}) {
       if (!result.ok) {
         throw new Error(`Web Push sender returned status ${result.status ?? 'unknown'}`);
       }
-      await setJob(key, {
-        ...record,
-        state: 'completed',
-        attempts: (record.attempts ?? 0) + 1,
-        updatedAt: timestamp,
-        lastAttemptAt: timestamp,
-        completedAt: timestamp,
-        lastStatus: result.status,
-        lastError: undefined,
-      });
+      await deleteJob(key, record.endpoint);
       sent += 1;
-    } catch (error) {
-      await setJob(key, {
-        ...record,
-        state: 'failed',
-        attempts: (record.attempts ?? 0) + 1,
-        updatedAt: timestamp,
-        lastAttemptAt: timestamp,
-        failedAt: timestamp,
-        lastError: error instanceof Error ? error.message : 'Scheduled push delivery failed',
-      });
+    } catch {
+      await deleteJob(key, record.endpoint);
       failed += 1;
     }
   }
 
-  return { ok: true, attempted: selected.length, sent, failed, remainingDue: Math.max(records.length - selected.length, 0), durable: isRedisConfigured() };
+  return { ok: true, attempted: selected.length, sent, failed, remainingDue: Math.max(dueKeys.length - selected.length, 0), durable: isRedisConfigured() };
 }
 
 async function listScheduledJobs(endpoint) {
@@ -428,6 +479,28 @@ async function listScheduledJobs(endpoint) {
     const first = a.scheduledFor.localeCompare(b.scheduledFor);
     return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
   });
+}
+
+async function cleanupPushStorage({ apply = false } = {}) {
+  if (isRedisConfigured()) {
+    const keys = await redisCommand(['KEYS', 'push:*']);
+    const pushKeys = Array.isArray(keys) ? keys : [];
+    if (apply && pushKeys.length > 0) {
+      await redisPipeline(pushKeys.map((key) => ['DEL', key]));
+    }
+    return { ok: true, dryRun: !apply, matchedKeys: pushKeys.length, deletedKeys: apply ? pushKeys.length : 0, durable: true };
+  }
+
+  const matchedKeys = memoryStore.subscriptions.size + memoryStore.scheduledJobs.size + memoryStore.jobKeysByEndpoint.size + memoryStore.allJobKeys.size + memoryStore.dueJobScores.size;
+  if (apply) {
+    memoryStore.subscriptions.clear();
+    memoryStore.subscriptionKeys.clear();
+    memoryStore.scheduledJobs.clear();
+    memoryStore.jobKeysByEndpoint.clear();
+    memoryStore.allJobKeys.clear();
+    memoryStore.dueJobScores.clear();
+  }
+  return { ok: true, dryRun: !apply, matchedKeys, deletedKeys: apply ? matchedKeys : 0, durable: false };
 }
 
 function isAuthorizedCronRequest(req) {
@@ -474,6 +547,14 @@ export default async function handler(req, res) {
       }
       const limit = Number(req.query?.limit ?? 25);
       return json(res, 200, await sendDueScheduledNotifications({ limit: Number.isFinite(limit) ? limit : 25 }));
+    }
+
+    if (req.method === 'POST' && action === 'cleanup') {
+      if (!isAuthorizedCronRequest(req)) {
+        return json(res, 401, { error: 'Cleanup request is not authorized' });
+      }
+      const body = readBody(req);
+      return json(res, 200, await cleanupPushStorage({ apply: body.apply === true }));
     }
 
     if (req.method === 'GET' && action === 'status') {

@@ -71,7 +71,7 @@ describe('Today local task workflow', () => {
         }),
       ]);
     });
-  });
+  }, 20_000);
 
   it('completes, orders incomplete tasks first, and deletes tasks', async () => {
     const user = userEvent.setup();

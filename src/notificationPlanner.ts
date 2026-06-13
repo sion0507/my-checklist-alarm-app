@@ -19,10 +19,13 @@ export type ScheduledNotificationJob = {
   };
 };
 
-type BuildScheduleInput = {
+export const DEFAULT_NOTIFICATION_SCHEDULE_DAYS = 3;
+
+export type BuildScheduleInput = {
   tasks: Task[];
   settings: ReminderScheduleSettings;
   startDate?: string;
+  days?: number;
 };
 
 function parseLocalDate(dateString: string) {
@@ -60,14 +63,16 @@ function dailyJob(kind: 'morning' | 'evening', date: string, time: string): Sche
   };
 }
 
-export function buildSevenDayNotificationSchedule({
+export function buildUpcomingNotificationSchedule({
   tasks,
   settings,
   startDate = formatLocalDate(new Date()),
+  days = DEFAULT_NOTIFICATION_SCHEDULE_DAYS,
 }: BuildScheduleInput) {
   const jobs: ScheduledNotificationJob[] = [];
+  const horizonDays = Math.max(1, Math.floor(days));
 
-  for (let offset = 0; offset < 7; offset += 1) {
+  for (let offset = 0; offset < horizonDays; offset += 1) {
     const date = addDays(startDate, offset);
     jobs.push(dailyJob('morning', date, settings.morningTime));
     const occurrences = projectTasksForDate(tasks, date);
@@ -99,3 +104,5 @@ export function buildSevenDayNotificationSchedule({
     return first === 0 ? a.jobId.localeCompare(b.jobId) : first;
   });
 }
+
+export const buildSevenDayNotificationSchedule = buildUpcomingNotificationSchedule;
