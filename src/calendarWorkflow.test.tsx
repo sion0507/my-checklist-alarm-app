@@ -45,6 +45,56 @@ describe('Calendar month view workflow', () => {
     expect(await screen.findByRole('dialog', { name: /병원 예약 아주 긴 제목입니다 상세/ })).toBeInTheDocument();
   });
 
+  it('marks calendar task pills with accessible type colors and a non-color legend', async () => {
+    await createTask({ title: '기본 색상', date: '2026-06-10', time: '', recurrence: 'none', memo: '', notify: false, creationType: 'single' });
+    await createTask({ title: '기간 색상', date: '2026-06-10', time: '', recurrence: 'none', memo: '', notify: false, creationType: 'range' });
+    await createTask({ title: '반복 색상', date: '2026-06-11', time: '', recurrence: 'weekly', memo: '', notify: false, creationType: 'repeat' });
+    await createTask({ title: '다중 색상', date: '2026-06-11', time: '', recurrence: 'none', memo: '', notify: false, creationType: 'multi' });
+
+    render(<App initialCalendarDate={new Date(2026, 5, 1)} />);
+    fireEvent.click(screen.getByRole('tab', { name: /캘린더/ }));
+
+    const legend = screen.getByRole('list', { name: '캘린더 할 일 유형 범례' });
+    expect(within(legend).getByText('기본').closest('li')).toHaveClass('task-type-legend-single');
+    expect(within(legend).getByText('기간').closest('li')).toHaveClass('task-type-legend-range');
+    expect(within(legend).getByText('반복').closest('li')).toHaveClass('task-type-legend-repeat');
+    expect(within(legend).getByText('다중').closest('li')).toHaveClass('task-type-legend-multi');
+
+    const june10 = screen.getByRole('button', { name: /2026-06-10/ });
+    const basicPill = await within(june10).findByRole('button', { name: '기본 색상 상세 열기' });
+    const rangePill = within(june10).getByRole('button', { name: '기간 색상 상세 열기' });
+    expect(basicPill).toHaveClass('task-pill-single');
+    expect(rangePill).toHaveClass('task-pill-range');
+    expect(within(basicPill).getByText('●')).toHaveAttribute('aria-hidden', 'true');
+    expect(within(rangePill).getByText('◆')).toHaveAttribute('aria-hidden', 'true');
+
+    const june11 = screen.getByRole('button', { name: /2026-06-11/ });
+    const repeatPill = within(june11).getByRole('button', { name: '반복 색상 상세 열기' });
+    const multiPill = within(june11).getByRole('button', { name: '다중 색상 상세 열기' });
+    expect(repeatPill).toHaveClass('task-pill-repeat');
+    expect(multiPill).toHaveClass('task-pill-multi');
+  });
+
+  it('keeps task type colors explicit and high-contrast across light and dark theme variables', () => {
+    const expectedVariables = [
+      '--task-type-single-bg: #dbeafe',
+      '--task-type-single-text: #1e3a8a',
+      '--task-type-range-bg: #dcfce7',
+      '--task-type-range-text: #14532d',
+      '--task-type-repeat-bg: #fef3c7',
+      '--task-type-repeat-text: #713f12',
+      '--task-type-multi-bg: #fee2e2',
+      '--task-type-multi-text: #7f1d1d',
+    ];
+    for (const variable of expectedVariables) {
+      expect(styles).toContain(variable);
+    }
+    expect(styles).toMatch(/\[data-theme-mode='dark'\][^{]*\{[^}]*--task-type-single-bg:\s*#1e3a8a[^}]*--task-type-single-text:\s*#dbeafe/s);
+    expect(styles).toMatch(/\[data-theme-mode='dark'\][^{]*\{[^}]*--task-type-range-bg:\s*#14532d[^}]*--task-type-range-text:\s*#dcfce7/s);
+    expect(styles).toMatch(/\[data-theme-mode='dark'\][^{]*\{[^}]*--task-type-repeat-bg:\s*#713f12[^}]*--task-type-repeat-text:\s*#fef3c7/s);
+    expect(styles).toMatch(/\[data-theme-mode='dark'\][^{]*\{[^}]*--task-type-multi-bg:\s*#7f1d1d[^}]*--task-type-multi-text:\s*#fee2e2/s);
+  });
+
   it('opens task detail above the selected-date modal and routes focus to the detail panel', async () => {
     await createTask({ title: '선택 날짜 상세 할 일', date: '2026-06-12', time: '', recurrence: 'none', memo: '', notify: false });
     render(<App initialCalendarDate={new Date(2026, 5, 1)} />);

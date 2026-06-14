@@ -23,6 +23,7 @@ import {
   projectTasksForDate,
   Recurrence,
   Task,
+  TaskCreationType,
   TaskOccurrence,
   updateTask,
 } from './taskStore';
@@ -240,6 +241,19 @@ const repeatTypeLabels: Record<CalendarRepeatType, string> = {
   monthly: '매월',
   weekly: '매주',
 };
+
+const taskCreationTypeDetails: Record<TaskCreationType, { label: string; icon: string }> = {
+  single: { label: '기본', icon: '●' },
+  range: { label: '기간', icon: '◆' },
+  repeat: { label: '반복', icon: '↻' },
+  multi: { label: '다중', icon: '▦' },
+};
+
+const calendarTaskCreationTypes = Object.keys(taskCreationTypeDetails) as TaskCreationType[];
+
+function getTaskCreationType(task: TaskOccurrence): TaskCreationType {
+  return task.creationType ?? (task.recurrence === 'none' ? 'single' : 'repeat');
+}
 
 const koreanWeekdays = ['일', '월', '화', '수', '목', '금', '토'];
 const koreanWeekdayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -714,6 +728,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
             recurrence: 'weekly',
             memo: '',
             notify: false,
+            creationType: 'repeat',
           });
         }
       } else {
@@ -724,6 +739,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           recurrence: calendarCreateForm.repeatType === 'yearly' ? 'yearly' : 'monthly',
           memo: '',
           notify: false,
+          creationType: 'repeat',
         });
       }
     } else {
@@ -733,7 +749,7 @@ export default function App({ initialCalendarDate = new Date() }: AppProps) {
           ? calendarCreateForm.selectedDates
           : calendarCreateForm.selectedDates.slice(0, 1);
       for (const date of dates) {
-        await createTask({ title, date, time: '', recurrence: 'none', memo: '', notify: false });
+        await createTask({ title, date, time: '', recurrence: 'none', memo: '', notify: false, creationType: calendarCreateMode });
       }
     }
 
@@ -1487,6 +1503,16 @@ function CalendarPanel({
       <button className="calendar-create-open-button" onClick={onOpenCreate} type="button">
         캘린더에서 할 일 만들기
       </button>
+      <ul className="task-type-legend" aria-label="캘린더 할 일 유형 범례">
+        {calendarTaskCreationTypes.map((type) => {
+          const details = taskCreationTypeDetails[type];
+          return (
+            <li className={`task-type-legend-${type}`} key={type}>
+              <span aria-hidden="true">{details.icon}</span> {details.label}
+            </li>
+          );
+        })}
+      </ul>
       <div className="calendar-jump" aria-label="연월 바로 이동">
         <label>
           연도 선택
@@ -1558,10 +1584,12 @@ function CalendarPanel({
                   {visible.map((task) => {
                     const taskKey = `${task.id}:${task.occurrenceDate}`;
                     const isHighlighted = taskKey === highlightedTaskKey;
+                    const taskType = getTaskCreationType(task);
+                    const taskTypeDetails = taskCreationTypeDetails[taskType];
                     return (
                       <button
                         aria-label={`${task.title} 상세 열기`}
-                        className={`task-pill ${isHighlighted ? 'notification-highlight' : ''}`}
+                        className={`task-pill task-pill-${taskType} ${isHighlighted ? 'notification-highlight' : ''}`}
                         key={taskKey}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -1569,6 +1597,7 @@ function CalendarPanel({
                         }}
                         type="button"
                       >
+                        <span aria-hidden="true" className="task-type-icon">{taskTypeDetails.icon}</span>
                         {task.time ? `${task.time} ` : ''}
                         {task.title}
                       </button>
@@ -1746,11 +1775,15 @@ function SelectedDateModal({
             {selectedTasks.map((task) => {
               const taskKey = `${task.id}:${task.occurrenceDate}`;
               const isHighlighted = taskKey === highlightedTaskKey;
+              const taskType = getTaskCreationType(task);
+              const taskTypeDetails = taskCreationTypeDetails[taskType];
               return (
-                <li className={isHighlighted ? 'notification-highlight' : ''} key={taskKey}>
-                  <button data-testid={isHighlighted ? 'notification-highlighted-task' : undefined} onClick={() => onOpenTask(task)} type="button">
+                <li className={`${isHighlighted ? 'notification-highlight' : ''} selected-task-${taskType}`} key={taskKey}>
+                  <button aria-label={task.title} data-testid={isHighlighted ? 'notification-highlighted-task' : undefined} onClick={() => onOpenTask(task)} type="button">
+                    <span aria-hidden="true" className="task-type-icon">{taskTypeDetails.icon}</span>
                     {task.time ? `${task.time} ` : ''}
                     {task.title}
+                    <span className="selected-task-type-label">{taskTypeDetails.label} 할 일</span>
                   </button>
                 </li>
               );
